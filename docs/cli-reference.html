@@ -54,11 +54,18 @@
         <tr><th>Flag</th><th>Description</th><th>Default</th></tr>
         <tr><td><code>--include &lt;glob...&gt;</code></td><td>Only include files matching these globs</td><td>all source files</td></tr>
         <tr><td><code>--exclude &lt;glob...&gt;</code></td><td>Exclude files matching these globs</td><td>—</td></tr>
+        <tr><td><code>--json</code></td><td>Machine-readable JSON report on stdout (logs stay on stderr) — stack, confidence, per-file roles/tokens, excluded sensitive files</td><td>off</td></tr>
         <tr><td><code>--verbose</code></td><td>Debug logging</td><td>off</td></tr>
       </table>
       <p>
         Sensitive files (<code>.env</code>, keys, credentials) are always discovered and excluded
         from readable content — they show up as warnings, never in prompts.
+      </p>
+      <pre>restack scan ./legacy-app --json | jq '{stack, confidence, totalTokens}'</pre>
+      <p>
+        With <code>--json</code> the report goes to stdout and human-readable log lines stay on
+        stderr, so <code>restack scan app --json 2&gt;/dev/null</code> is always valid JSON —
+        handy for scripts and CI checks. File contents are never included in the report.
       </p>
     </section>
 

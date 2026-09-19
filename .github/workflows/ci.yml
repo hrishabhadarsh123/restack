@@ -36,3 +36,18 @@ jobs:
 
       - name: CLI smoke test (scan fixture, no API key)
         run: node dist/cli.js scan test/fixtures/php-app
+
+      - name: CLI smoke test (scan --json emits valid JSON)
+        shell: bash
+        run: |
+          node dist/cli.js scan test/fixtures/php-app --json 2>/dev/null > scan-smoke.json
+          node -e "
+            const r = JSON.parse(require('fs').readFileSync('scan-smoke.json', 'utf8'));
+            if (r.stack !== 'php-jquery') throw new Error('unexpected stack: ' + r.stack);
+            if (!Array.isArray(r.files) || r.files.length === 0) throw new Error('empty files array');
+            if (typeof r.totalTokens !== 'number' || r.totalTokens <= 0) throw new Error('bad totalTokens');
+            if (r.fitsInOneWindow !== true) throw new Error('fixture should fit one window');
+            if (!r.excludedSensitive.includes('.env')) throw new Error('.env not reported as excluded');
+            console.log('scan --json OK:', r.stack, r.fileCount + ' files,', r.totalTokens, 'tokens');
+          "
+          rm -f scan-smoke.json

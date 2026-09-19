@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import path from "node:path";
-import { scanProject } from "../src/scanner.js";
+import { scanProject, buildScanJsonReport } from "../src/scanner.js";
 
 const PHP_APP = path.join(__dirname, "fixtures", "php-app");
 const PY2_APP = path.join(__dirname, "fixtures", "py2-app");
@@ -49,6 +49,36 @@ describe("scanProject", () => {
     for (const f of scan.files) {
       if (f.text != null) expect(f.tokens).toBeGreaterThan(0);
     }
+  });
+
+  it("builds a valid JSON report for --json output", async () => {
+    const scan = await scanProject(PHP_APP);
+    const report = buildScanJsonReport(scan);
+
+    // Round-trips through JSON without loss
+    const parsed = JSON.parse(JSON.stringify(report)) as typeof report;
+    expect(parsed.stack).toBe("php-jquery");
+    expect(parsed.fileCount).toBe(scan.files.length);
+    expect(parsed.readableFileCount).toBe(scan.files.filter((f) => f.text != null).length);
+    expect(parsed.totalTokens).toBe(scan.totalTokens);
+    expect(parsed.fitsInOneWindow).toBe(true); // fixture is small
+    expect(parsed.excludedSensitive).toContain(".env");
+    expect(parsed.libraries).toContain("jquery");
+
+    // Every file entry is complete and consistent with the scan
+    expect(parsed.files).toHaveLength(scan.files.length);
+    const envEntry = parsed.files.find((f) => f.path === ".env");
+    expect(envEntry).toBeDefined();
+    expect(envEntry!.readable).toBe(false);
+    expect(envEntry!.tokens).toBe(0);
+    const indexEntry = parsed.files.find((f) => f.path === "index.php");
+    expect(indexEntry).toBeDefined();
+    expect(indexEntry!.role).toBe("entry");
+    expect(indexEntry!.readable).toBe(true);
+    expect(indexEntry!.tokens).toBeGreaterThan(0);
+
+    // No file contents leak into the report
+    expect(JSON.stringify(parsed)).not.toContain("supersecret123");
   });
 
   it("throws on a nonexistent root", async () => {

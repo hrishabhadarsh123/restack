@@ -6,7 +6,7 @@
 import { Command } from "commander";
 import pc from "picocolors";
 import path from "node:path";
-import { scanProject } from "./scanner.js";
+import { scanProject, buildScanJsonReport } from "./scanner.js";
 import { getProfile } from "./profiles/index.js";
 import { runPlanner } from "./planner.js";
 import { runConverter } from "./converter-core.js";
@@ -78,8 +78,9 @@ program
   .argument("<projectRoot>", "path to the legacy project")
   .option("--include <glob...>", "only include files matching these globs")
   .option("--exclude <glob...>", "exclude files matching these globs")
+  .option("--json", "print a machine-readable JSON report on stdout (log output stays on stderr)")
   .option("--verbose", "debug logging")
-  .action(async (projectRoot: string, opts: CommonOpts & { include?: string[]; exclude?: string[] }) => {
+  .action(async (projectRoot: string, opts: CommonOpts & { include?: string[]; exclude?: string[]; json?: boolean }) => {
     applyCommon(opts);
     let scan: ScanResult;
     try {
@@ -87,6 +88,13 @@ program
     } catch (err) {
       logger.error(`Scan failed: ${(err as Error).message}`);
       process.exit(1);
+    }
+
+    if (opts.json) {
+      // Machine-readable mode: report goes to stdout, human output stays on stderr,
+      // so `restack scan app --json 2>/dev/null` is always valid JSON.
+      process.stdout.write(JSON.stringify(buildScanJsonReport(scan), null, 2) + "\n");
+      return;
     }
 
     const codeFiles = scan.files.filter((f) => f.text != null);

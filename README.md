@@ -68,6 +68,14 @@ except-syntax, coding cookies…), classifies file roles (entry/route/shared/con
 tokens, and warns about sensitive files (`.env`, keys, credentials) which are **never** read into
 context.
 
+Add `--json` for machine-readable output — stack, confidence, per-file roles and token counts and
+excluded sensitive files go to **stdout** while human-readable logs stay on **stderr**, so it pipes
+cleanly into `jq` or CI checks (file contents are never included):
+
+```bash
+restack scan ./legacy-app --json | jq '{stack, confidence, totalTokens}'
+```
+
 ### `restack plan <root> [--target t]`
 
 Packs as many files as fit into one Claude call — entry/config/routes/shared first, oversized

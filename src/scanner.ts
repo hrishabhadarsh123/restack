@@ -257,3 +257,55 @@ export async function scanProject(root: string, opts: ScanOptions = {}): Promise
     oversizedFiles,
   };
 }
+
+export interface ScanJsonReport {
+  root: string;
+  stack: LegacyStack;
+  confidence: number;
+  evidence: string[];
+  libraries: string[];
+  fileCount: number;
+  readableFileCount: number;
+  totalTokens: number;
+  /** True when the whole project fits a planning window with headroom. */
+  fitsInOneWindow: boolean;
+  excludedSensitive: string[];
+  oversizedFiles: string[];
+  files: Array<{
+    path: string;
+    role: FileRole;
+    language: string;
+    tokens: number;
+    size: number;
+    readable: boolean;
+  }>;
+}
+
+/**
+ * Machine-readable form of a scan (emitted by `restack scan --json`).
+ * Pure function so it can be unit-tested without running the CLI.
+ */
+export function buildScanJsonReport(scan: ScanResult): ScanJsonReport {
+  const codeFiles = scan.files.filter((f) => f.text != null);
+  return {
+    root: scan.root,
+    stack: scan.stack,
+    confidence: scan.confidence,
+    evidence: scan.evidence,
+    libraries: scan.libraries,
+    fileCount: scan.files.length,
+    readableFileCount: codeFiles.length,
+    totalTokens: scan.totalTokens,
+    fitsInOneWindow: scan.totalTokens <= 160_000,
+    excludedSensitive: scan.excludedSensitive,
+    oversizedFiles: scan.oversizedFiles,
+    files: scan.files.map((f) => ({
+      path: f.rel,
+      role: f.role,
+      language: f.language,
+      tokens: f.tokens,
+      size: f.size,
+      readable: f.text != null,
+    })),
+  };
+}
