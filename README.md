@@ -7,7 +7,7 @@
 
 **Legacy → modern stack converter, powered by Claude's 200k context window.**
 
-📖 **Docs site:** [hrishabhadarsh123.github.io/restack](https://hrishabhadarsh123.github.io/restack/) — overview & architecture deep-dive.
+📖 **Docs site:** [hrishabhadarsh123.github.io/restack](https://hrishabhadarsh123.github.io/restack/) — overview, architecture deep-dive & a full [PHP→Next.js walkthrough](https://hrishabhadarsh123.github.io/restack/walkthrough).
 
 Point `restack` at an old project — a PHP/jQuery app or a Python 2 codebase — and it reads the
 whole folder, understands the structure and dependencies in a single planning call, then converts

@@ -1,0 +1,216 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Walkthrough — restack docs</title>
+  <meta name="description" content="A complete scan → plan → convert walkthrough of the bundled PHP/jQuery fixture project." />
+  <link rel="stylesheet" href="./styles.css" />
+</head>
+<body>
+  <nav>
+    <div class="container">
+      <a class="brand" href="./index.html">re<span>stack</span></a>
+      <a class="link" href="./index.html">Overview</a>
+      <a class="link" href="./architecture.html">Architecture</a>
+      <a class="link" href="./cli-reference.html">CLI Reference</a>
+      <a class="link" href="./walkthrough.html">Walkthrough</a>
+      <span class="spacer"></span>
+      <a class="link" href="https://github.com/hrishabhadarsh123/restack">GitHub</a>
+    </div>
+  </nav>
+
+  <header class="hero">
+    <div class="container">
+      <h1>Walkthrough: PHP/jQuery → Next.js</h1>
+      <p class="tagline">
+        The bundled fixture at <code>test/fixtures/php-app</code> is a tiny legacy shop:
+        an entry router, two pages, a JSON endpoint, shared includes, and a jQuery
+        search box. Here's the full conversion, step by step.
+      </p>
+    </div>
+  </header>
+
+  <main class="container">
+    <section>
+      <h2>The legacy project</h2>
+      <pre>php-app/
+├── index.php              # entry: ?page= router
+├── includes/
+│   ├── db.php             # PDO helpers (shared)
+│   └── helpers.php        # e(), format_money() (shared)
+├── pages/
+│   ├── home.php           # static welcome
+│   ├── users.php          # users table + search input
+│   └── orders.php         # open orders list
+├── api/users_search.php   # JSON search endpoint
+├── js/users.js            # jQuery: live search
+├── style.css              # global styles
+└── .env                   # DB credentials (sensitive!)</pre>
+    </section>
+
+    <section>
+      <h2>Step 1 — <code>restack scan</code></h2>
+      <p>Actual output from the CLI (no API key needed):</p>
+      <pre>$ restack scan test/fixtures/php-app
+
+Stack: php-jquery  (confidence 80.0%)
+  • 7 .php file(s) found
+  • jQuery usage detected: js/users.js
+  libraries: jquery
+
+  files scanned       10
+  files readable      9
+  estimated tokens    820
+  context window      200k tokens
+  fits in one window  yes
+
+⚠ Excluded 1 sensitive file(s): .env
+
+Estimated planning-call input: ~4.8k tokens ≈ $0.25 (sonnet, one-shot plan)</pre>
+      <div class="note">
+        <code>.env</code> is detected and excluded <em>before</em> any API call — its contents
+        never reach the model. Target is implied: <code>php-jquery → nextjs</code>.
+      </div>
+    </section>
+
+    <section>
+      <h2>Step 2 — <code>restack convert --dry-run</code> (the plan)</h2>
+      <p>
+        One Claude call over the packed project produces <code>.restack/plan.json</code>.
+        Representative (abridged) plan for this fixture:
+      </p>
+      <pre>{
+  "target": "nextjs",
+  "summary": "PHP multi-page shop to Next.js App Router: server-rendered
+              pages, JSON search endpoint, jQuery search as a client component.",
+  "decisions": [
+    { "topic": "data access",  "choice": "PDO helpers centralize into lib/db.ts with parameterized queries" },
+    { "topic": "search box",   "choice": "jQuery live search becomes a 'use client' component with fetch + useTransition" },
+    { "topic": "escaping",     "choice": "drop e()/htmlspecialchars — React escapes by default" },
+    { "topic": "config",       "choice": "DB_* env vars via process.env, documented in .env.example" }
+  ],
+  "dependencies": ["next", "react", "react-dom"],
+  "fileMappings": [
+    { "source": "includes/db.php",       "targets": ["lib/db.ts"],                      "note": "PDO -> libsql/pool" },
+    { "source": "includes/helpers.php",  "targets": ["lib/format.ts"],                  "note": "only format_money survives" },
+    { "source": "index.php",             "targets": ["app/page.tsx"],                   "note": "home route" },
+    { "source": "pages/users.php",       "targets": ["app/users/page.tsx"],             "note": "server-rendered table" },
+    { "source": "pages/orders.php",      "targets": ["app/orders/page.tsx"],            "note": "open orders" },
+    { "source": "api/users_search.php",  "targets": ["app/api/users/search/route.ts"],  "note": "GET handler" },
+    { "source": "js/users.js",           "targets": ["components/UserSearch.tsx"],      "note": "client component" },
+    { "source": "style.css",             "targets": ["app/globals.css"],                "note": "as-is" }
+  ],
+  "routeMappings": [
+    { "from": "index.php?page=users",       "to": "/users",              "method": "GET" },
+    { "from": "index.php?page=orders",      "to": "/orders",             "method": "GET" },
+    { "from": "api/users_search.php?q=...", "to": "/api/users/search",   "method": "GET" }
+  ],
+  "droppedFiles": [
+    { "path": "pages/home.php", "reason": "merged into app/page.tsx (index.php)" },
+    { "path": ".env",           "reason": "replaced by .env.example guidance" }
+  ],
+  "conversionOrder": [
+    ["includes/db.php", "includes/helpers.php"],
+    ["pages/users.php", "pages/orders.php", "api/users_search.php"],
+    ["js/users.js", "style.css"]
+  ],
+  "risks": [
+    "users.php renders user input unescaped before jQuery re-renders it — XSS in the legacy app, fixed by React escaping",
+    "search endpoint uses LIKE with a bound param already; keep it that way"
+  ]
+}</pre>
+      <p>
+        Waves are the dependency DAG: shared libs first, then routes, then the client
+        component and styles. Every source appears exactly once.
+      </p>
+    </section>
+
+    <section>
+      <h2>Step 3 — <code>restack convert</code></h2>
+      <p>
+        The plan is executed wave by wave, ≤3 sources per batch, with
+        <code>tsc --noEmit</code> after each batch and one bounded repair round.
+        Representative terminal transcript:
+      </p>
+      <pre>$ restack convert test/fixtures/php-app --out converted
+
+restack convert — php-jquery → nextjs
+Output: A:\demo\converted · model: claude-sonnet-4-5 · workers: 2 · max cost: $20.00
+Planning call: ~4.8k input, 9 files verbatim, 0 summarized, 0 omitted
+✓ Plan ready (8 mappings) — $0.03
+Conversion: 4 batch(es) across 3 wave(s), 2 worker(s)
+
+✓ includes/db.php → lib/db.ts
+✓ includes/helpers.php → lib/format.ts
+✓ pages/users.php → app/users/page.tsx
+⚠ Verification failed (1 error(s)) — repair round 1/1 for batch [api/users_search.php]
+🔧 api/users_search.php → app/api/users/search/route.ts
+✓ index.php → app/page.tsx
+✓ js/users.js → components/UserSearch.tsx
+✓ style.css → app/globals.css
+
+Conversion finished in 1m 48s
+  converted            6
+  repaired             1
+  failed               0
+  dropped (by plan)    2
+  total spend          $0.11
+
+Run it: cd converted && npm install && npm run dev</pre>
+      <div class="warn note">
+        The <code>🔧</code> line is the repair loop in action: the first generated
+        route failed <code>tsc</code>, the compiler errors were fed back to Claude, and
+        the re-emitted file passed. Failed batches would be listed with
+        <code>✗</code> and recorded in <code>.restack/state.json</code> for
+        <code>--resume</code>.
+      </div>
+    </section>
+
+    <section>
+      <h2>The result</h2>
+      <pre>converted/
+├── app/
+│   ├── api/users/search/route.ts   # from api/users_search.php
+│   ├── users/page.tsx              # from pages/users.php
+│   ├── orders/page.tsx             # from pages/orders.php
+│   ├── page.tsx                    # from index.php
+│   ├── layout.tsx                  # static scaffold
+│   └── globals.css                 # from style.css
+├── components/
+│   └── UserSearch.tsx              # from js/users.js  ("use client")
+├── lib/
+│   ├── db.ts                       # from includes/db.php
+│   └── format.ts                   # from includes/helpers.php
+├── package.json · tsconfig.json · next.config.mjs   # static scaffold
+└── .restack/
+    ├── plan.json                   # the plan (resume reuses it)
+    └── state.json                  # checkpoint: per-source status</pre>
+      <p>
+        The jQuery search loop is now a client component; the users table is a server
+        component that queries through <code>lib/db.ts</code>; and the legacy XSS risk
+        the plan flagged is gone because React escapes output by default.
+      </p>
+    </section>
+
+    <section>
+      <h2>Try it yourself</h2>
+      <pre>git clone https://github.com/hrishabhadarsh123/restack.git
+cd restack &amp;&amp; npm install &amp;&amp; npm run build
+node dist/cli.js scan test/fixtures/php-app          # free, no key
+node dist/cli.js convert test/fixtures/php-app --dry-run --out /tmp/demo
+node dist/cli.js convert test/fixtures/php-app --out /tmp/demo</pre>
+    </section>
+  </main>
+
+  <footer>
+    <div class="container">
+      <p>
+        <a href="./index.html">← Overview</a> ·
+        <a href="./cli-reference.html">CLI Reference</a> ·
+        <a href="https://github.com/hrishabhadarsh123/restack/tree/main/test/fixtures/php-app">Fixture source</a>
+      </p>
+    </div>
+  </footer>
+</body>
+</html>
