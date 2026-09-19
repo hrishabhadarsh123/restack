@@ -1,5 +1,5 @@
 {
-  "name": "restack",
+  "name": "restack-ai",
   "version": "0.1.0",
   "description": "Convert legacy projects (PHP/jQuery, Python 2) to modern stacks (Next.js, FastAPI) using Claude's long context window",
   "type": "module",

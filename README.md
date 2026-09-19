@@ -2,7 +2,7 @@
 
 [![CI](https://github.com/hrishabhadarsh123/restack/actions/workflows/ci.yml/badge.svg)](https://github.com/hrishabhadarsh123/restack/actions/workflows/ci.yml)
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](LICENSE)
-[![Node](https://img.shields.io/node/v/restack)](https://www.npmjs.com/package/restack)
+[![Node](https://img.shields.io/node/v/restack-ai)](https://www.npmjs.com/package/restack-ai)
 [![PRs welcome](https://img.shields.io/badge/PRs-welcome-brightgreen.svg)](CONTRIBUTING.md)
 
 **Legacy → modern stack converter, powered by Claude's 200k context window.**
@@ -22,7 +22,7 @@ Your original project is never modified — all output goes to a separate folder
 
 ## Install / build
 
-Use without installing (after publishing, `npx restack ...` works directly):
+Use without installing (after publishing, `npx restack-ai ...` works directly):
 
 ```bash
 # from source

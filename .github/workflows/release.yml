@@ -69,8 +69,8 @@ jobs:
         with:
           generate_release_notes: true # auto: PRs + contributors since last tag
           body: |
-            Install globally: `npm install -g restack@${GITHUB_REF_NAME#v}`
-            Or run directly: `npx restack@latest --help`
+            Install globally: `npm install -g restack-ai@${GITHUB_REF_NAME#v}`
+            Or run directly: `npx restack-ai@latest --help`
           files: restack-*.tgz
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
