@@ -1,0 +1,136 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>restack — legacy to modern stack, with Claude's 200k context</title>
+  <meta name="description" content="restack converts PHP/jQuery and Python 2 projects into idiomatic Next.js or FastAPI apps, using Claude's 200k context window." />
+  <link rel="stylesheet" href="./styles.css" />
+</head>
+<body>
+  <nav>
+    <div class="container">
+      <a class="brand" href="./">re<span>stack</span></a>
+      <a class="link" href="./architecture.html">Architecture</a>
+      <a class="link" href="https://github.com/hrishabhadarsh123/restack">GitHub</a>
+      <span class="spacer"></span>
+      <a class="link" href="https://www.npmjs.com/package/restack">npm</a>
+    </div>
+  </nav>
+
+  <header class="hero">
+    <div class="container">
+      <h1>Legacy code in. Modern stack out.</h1>
+      <p class="tagline">
+        <strong>restack</strong> reads an old PHP/jQuery or Python 2 project in one
+        200k-token planning call, then converts it file-by-file into an idiomatic
+        <strong>Next.js + TypeScript</strong> or <strong>FastAPI</strong> codebase.
+        Originals are never touched.
+      </p>
+      <div class="badges">
+        <a class="badge" href="https://github.com/hrishabhadarsh123/restack/actions/workflows/ci.yml">CI</a>
+        <a class="badge" href="https://github.com/hrishabhadarsh123/restack/blob/main/LICENSE">MIT</a>
+        <a class="badge" href="https://www.npmjs.com/package/restack">Node ≥ 20</a>
+        <a class="badge" href="https://github.com/hrishabhadarsh123/restack/issues">Issues</a>
+      </div>
+    </div>
+  </header>
+
+  <main class="container">
+    <section>
+      <h2>Three commands</h2>
+      <div class="cards">
+        <div class="card">
+          <span class="step">1</span>
+          <h3><code>scan</code></h3>
+          <p>Detect the stack (PHP/jQuery vs Python 2), inventory files, estimate tokens
+          and cost. No API key needed.</p>
+        </div>
+        <div class="card">
+          <span class="step">2</span>
+          <h3><code>plan</code></h3>
+          <p>One big Claude call over the packed project produces a structured migration
+          plan: mappings, routes, waves, risks.</p>
+        </div>
+        <div class="card">
+          <span class="step">3</span>
+          <h3><code>convert</code></h3>
+          <p>Waves of batches with verify + repair loops (<code>tsc</code> /
+          <code>ast.parse</code>), checkpoint/resume, and a hard cost guard.</p>
+        </div>
+      </div>
+    </section>
+
+    <section>
+      <h2>Quickstart</h2>
+      <pre>git clone https://github.com/hrishabhadarsh123/restack.git
+cd restack &amp;&amp; npm install &amp;&amp; npm run build
+
+export ANTHROPIC_API_KEY=sk-ant-...
+
+# dry analysis — no key needed
+node dist/cli.js scan ./legacy-app
+
+# plan + convert
+node dist/cli.js convert ./legacy-app --target nextjs --out ./converted</pre>
+      <div class="note">
+        <code>--target</code> is optional — restack picks it from the detected stack
+        (<code>php-jquery → nextjs</code>, <code>python2 → fastapi</code>). A
+        <code>--max-cost</code> guard (default $20) aborts before overspending, and an
+        interrupted run resumes with <code>--resume</code>.
+      </div>
+    </section>
+
+    <section>
+      <h2>How the 200k window is used</h2>
+      <div class="pipeline">
+        <div class="pipe-node"><b>Scan</b><small>stack + inventory + tokens</small></div>
+        <div class="pipe-arrow">→</div>
+        <div class="pipe-node"><b>Pack</b><small>verbatim first, head+tail for big files</small></div>
+        <div class="pipe-arrow">→</div>
+        <div class="pipe-node"><b>Plan</b><small>one call → plan.json</small></div>
+        <div class="pipe-arrow">→</div>
+        <div class="pipe-node"><b>Convert</b><small>waves · ≤3 files/batch · verify</small></div>
+        <div class="pipe-arrow">→</div>
+        <div class="pipe-node"><b>Review</b><small>optional consistency pass</small></div>
+      </div>
+      <p>
+        The planning prompt carries an inventory of <em>every</em> file plus verbatim source
+        for as many as fit (entry/config/routes first). Conversion batches reuse the plan via
+        prompt caching, so the stable context is billed at cache-read prices.
+      </p>
+    </section>
+
+    <section>
+      <h2>Safety by default</h2>
+      <div class="cards">
+        <div class="card">
+          <h3>Secrets never packed</h3>
+          <p><code>.env</code>, key files and credentials are detected and excluded from
+          model context before any API call.</p>
+        </div>
+        <div class="card">
+          <h3>Originals untouched</h3>
+          <p>All output goes to a separate <code>--out</code> directory; the legacy project
+          is only ever read.</p>
+        </div>
+        <div class="card">
+          <h3>Cost guard</h3>
+          <p><code>--max-cost</code> aborts before a call that would exceed the budget;
+          429/5xx get exponential backoff.</p>
+        </div>
+      </div>
+    </section>
+  </main>
+
+  <footer>
+    <div class="container">
+      <p>
+        Built by <a href="https://github.com/hrishabhadarsh123">hrishabhadarsh123</a> ·
+        <a href="https://github.com/hrishabhadarsh123/restack/blob/main/CONTRIBUTING.md">Contributing</a> ·
+        <a href="https://github.com/hrishabhadarsh123/restack/blob/main/LICENSE">MIT License</a>
+      </p>
+    </div>
+  </footer>
+</body>
+</html>

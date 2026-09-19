@@ -1,0 +1,208 @@
+/* restack docs — minimal, no frameworks */
+:root {
+  --bg: #fdfdfc;
+  --fg: #1c2430;
+  --muted: #5b6675;
+  --accent: #4f46e5;
+  --accent-soft: #eef2ff;
+  --border: #e4e7ec;
+  --code-bg: #0f172a;
+  --code-fg: #e2e8f0;
+  --card: #ffffff;
+}
+
+* { box-sizing: border-box; }
+
+html { scroll-behavior: smooth; }
+
+body {
+  margin: 0;
+  font-family: system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
+  background: var(--bg);
+  color: var(--fg);
+  line-height: 1.65;
+}
+
+.container {
+  max-width: 880px;
+  margin: 0 auto;
+  padding: 0 1.25rem;
+}
+
+/* ---- Nav ---- */
+nav {
+  border-bottom: 1px solid var(--border);
+  background: rgba(253, 253, 252, 0.92);
+  position: sticky;
+  top: 0;
+  z-index: 10;
+  backdrop-filter: blur(6px);
+}
+nav .container {
+  display: flex;
+  align-items: center;
+  gap: 1.25rem;
+  height: 56px;
+}
+.brand {
+  font-weight: 700;
+  font-size: 1.05rem;
+  color: var(--fg);
+  text-decoration: none;
+}
+.brand span { color: var(--accent); }
+nav a.link {
+  color: var(--muted);
+  text-decoration: none;
+  font-size: 0.95rem;
+}
+nav a.link:hover { color: var(--fg); }
+nav .spacer { flex: 1; }
+
+/* ---- Hero ---- */
+.hero {
+  padding: 3rem 0 2rem;
+  border-bottom: 1px solid var(--border);
+  background: linear-gradient(180deg, var(--accent-soft), var(--bg));
+}
+.hero h1 {
+  margin: 0 0 0.5rem;
+  font-size: 2.1rem;
+  letter-spacing: -0.02em;
+}
+.hero p.tagline {
+  margin: 0;
+  font-size: 1.15rem;
+  color: var(--muted);
+  max-width: 44rem;
+}
+.badges { margin-top: 1rem; display: flex; flex-wrap: wrap; gap: 0.5rem; }
+.badge {
+  font-size: 0.78rem;
+  padding: 0.18rem 0.6rem;
+  border-radius: 999px;
+  border: 1px solid var(--border);
+  background: var(--card);
+  color: var(--muted);
+  text-decoration: none;
+}
+.badge:hover { border-color: var(--accent); color: var(--accent); }
+
+/* ---- Sections ---- */
+main { padding: 2rem 0 3rem; }
+section { margin-bottom: 2.5rem; }
+h2 {
+  font-size: 1.35rem;
+  letter-spacing: -0.01em;
+  margin: 0 0 0.75rem;
+  padding-bottom: 0.35rem;
+  border-bottom: 2px solid var(--accent-soft);
+}
+h3 { font-size: 1.05rem; margin: 1.5rem 0 0.5rem; }
+p, li { color: #2a3441; }
+a { color: var(--accent); }
+
+/* ---- Code ---- */
+pre {
+  background: var(--code-bg);
+  color: var(--code-fg);
+  padding: 1rem 1.15rem;
+  border-radius: 10px;
+  overflow-x: auto;
+  font-size: 0.86rem;
+  line-height: 1.55;
+}
+code {
+  font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+}
+p code, li code, td code {
+  background: #f1f3f9;
+  border: 1px solid var(--border);
+  border-radius: 5px;
+  padding: 0.08rem 0.35rem;
+  font-size: 0.84em;
+  color: #3730a3;
+}
+
+/* ---- Tables ---- */
+table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 0.92rem;
+  margin: 0.75rem 0;
+}
+th, td {
+  text-align: left;
+  padding: 0.55rem 0.75rem;
+  border-bottom: 1px solid var(--border);
+}
+th { color: var(--muted); font-weight: 600; font-size: 0.82rem; text-transform: uppercase; letter-spacing: 0.04em; }
+tr:last-child td { border-bottom: none; }
+
+/* ---- Cards ---- */
+.cards {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(240px, 1fr));
+  gap: 1rem;
+}
+.card {
+  background: var(--card);
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  padding: 1.1rem 1.2rem;
+}
+.card h3 { margin: 0 0 0.4rem; }
+.card p { margin: 0; font-size: 0.92rem; color: var(--muted); }
+.card .step {
+  display: inline-block;
+  font-size: 0.72rem;
+  font-weight: 700;
+  color: var(--accent);
+  background: var(--accent-soft);
+  border-radius: 6px;
+  padding: 0.1rem 0.5rem;
+  margin-bottom: 0.5rem;
+}
+
+/* ---- Pipeline diagram ---- */
+.pipeline {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: stretch;
+  gap: 0.5rem;
+  margin: 1rem 0;
+}
+.pipe-node {
+  flex: 1 1 130px;
+  border: 1.5px solid var(--border);
+  border-radius: 10px;
+  padding: 0.7rem 0.8rem;
+  text-align: center;
+  background: var(--card);
+}
+.pipe-node b { display: block; }
+.pipe-node small { color: var(--muted); }
+.pipe-arrow {
+  align-self: center;
+  color: var(--accent);
+  font-weight: 700;
+}
+
+/* ---- Notes ---- */
+.note {
+  border-left: 3px solid var(--accent);
+  background: var(--accent-soft);
+  border-radius: 0 8px 8px 0;
+  padding: 0.7rem 1rem;
+  font-size: 0.92rem;
+  margin: 1rem 0;
+}
+.warn { border-left-color: #d97706; background: #fffbeb; }
+
+footer {
+  border-top: 1px solid var(--border);
+  padding: 1.5rem 0 2.5rem;
+  color: var(--muted);
+  font-size: 0.88rem;
+}
+footer a { color: var(--muted); }
