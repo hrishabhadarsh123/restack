@@ -67,3 +67,18 @@ test/
 
 Open a GitHub issue with the bug-report template: exact command, `--verbose` logs (redacted),
 OS/Node versions, and the legacy stack + rough size. That's usually enough to reproduce.
+
+## Releasing
+
+Maintainers cut releases with a version tag; `.github/workflows/release.yml` does the rest:
+
+```bash
+npm version patch   # or minor|major — bumps package.json, creates the v* tag, commits
+git push origin main --follow-tags
+```
+
+The release job then: verifies tag ↔ `package.json` version match, runs typecheck + tests +
+build + a CLI smoke test, publishes to npm with provenance, and creates the GitHub Release with	auto-generated notes and the packed tarball as an asset.
+
+Prerequisite: an npm **Automation** access token stored as the repo secret `NPM_TOKEN`
+(npmjs.com → Access Tokens → Generate → type "Automation").

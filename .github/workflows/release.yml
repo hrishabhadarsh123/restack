@@ -1,0 +1,76 @@
+# Release pipeline — triggered by pushing a version tag:
+#   npm version patch|minor|major   # bumps package.json + creates v* tag
+#   git push origin main --follow-tags
+#
+# Required secret:
+#   NPM_TOKEN — an npm "Automation" token (npmjs.com → Access Tokens).
+#   The tag version MUST match package.json version or the run fails early.
+
+name: Release
+
+on:
+  push:
+    tags:
+      - "v*.*.*"
+
+permissions:
+  contents: write # create the GitHub Release
+  id-token: write # npm provenance (OIDC)
+
+jobs:
+  release:
+    name: Test, publish & release
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+          registry-url: https://registry.npmjs.org
+
+      - name: Verify tag matches package.json version
+        run: |
+          PKG_VERSION="v$(node -p "require('./package.json').version")"
+          TAG_VERSION="${GITHUB_REF_NAME}"
+          if [ "$PKG_VERSION" != "$TAG_VERSION" ]; then
+            echo "::error::Tag ${TAG_VERSION} does not match package.json version ${PKG_VERSION}"
+            exit 1
+          fi
+          echo "Releasing ${TAG_VERSION} ✓"
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Typecheck
+        run: npm run typecheck
+
+      - name: Test
+        run: npm test
+
+      - name: Build
+        run: npm run build
+
+      - name: CLI smoke test
+        run: node dist/cli.js scan test/fixtures/php-app
+
+      - name: Pack tarball
+        run: npm pack
+        # -> restack-<version>.tgz in workspace root
+
+      - name: Publish to npm
+        run: npm publish --provenance --access public
+        env:
+          NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
+
+      - name: Create GitHub Release with notes
+        uses: softprops/action-gh-release@v2
+        with:
+          generate_release_notes: true # auto: PRs + contributors since last tag
+          body: |
+            Install globally: `npm install -g restack@${GITHUB_REF_NAME#v}`
+            Or run directly: `npx restack@latest --help`
+          files: restack-*.tgz
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
