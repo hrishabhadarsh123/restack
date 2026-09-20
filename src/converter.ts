@@ -7,7 +7,8 @@ import path from "node:path";
 import { promises as fsp } from "node:fs";
 import type { AnthropicClient } from "./anthropic.js";
 import { getProfile } from "./profiles/index.js";
-import type { FileResult, GeneratedFile, MigrationPlan, ModernTarget, ScanResult } from "./types.js";
+import { STACK_CONVERSION_NOTES } from "./types.js";
+import type { FileResult, GeneratedFile, LegacyStack, MigrationPlan, ModernTarget, ScanResult } from "./types.js";
 import { logger } from "./util/logger.js";
 import { estimateTokens } from "./util/tokens.js";
 import { CostLimitError } from "./state.js";
@@ -72,8 +73,14 @@ export function buildConversionBatches(
   return batches;
 }
 
-export function buildConversionSystemPrompt(plan: MigrationPlan, target: ModernTarget): string {
+export function buildConversionSystemPrompt(
+  plan: MigrationPlan,
+  target: ModernTarget,
+  legacyStack?: LegacyStack,
+): string {
   const profile = getProfile(target);
+  const stackNote =
+    legacyStack && legacyStack !== "unknown" ? STACK_CONVERSION_NOTES[legacyStack] : undefined;
   const routeTable = plan.routeMappings
     .map((r) => `- ${r.method ? r.method + " " : ""}${r.from} -> ${r.to}`)
     .join("\n");
@@ -84,6 +91,7 @@ export function buildConversionSystemPrompt(plan: MigrationPlan, target: ModernT
 
   return `${profile.conventions}
 
+${stackNote ? stackNote + "\n" : ""}
 ## Project migration context
 Summary: ${plan.summary}
 

@@ -7,7 +7,7 @@ import { z } from "zod";
 // Scanner
 // ---------------------------------------------------------------------------
 
-export const LegacyStack = z.enum(["php-jquery", "python2", "unknown"]);
+export const LegacyStack = z.enum(["php-jquery", "python2", "django", "unknown"]);
 export type LegacyStack = z.infer<typeof LegacyStack>;
 
 export const ModernTarget = z.enum(["nextjs", "fastapi"]);
@@ -51,6 +51,28 @@ export interface ScanResult {
   /** Relative paths skipped for being oversized (never read into context). */
   oversizedFiles: string[];
 }
+
+/**
+ * Legacy-stack-specific guidance injected into conversion prompts so the
+ * converter knows which idioms to expect beyond the generic target profile.
+ */
+export const STACK_CONVERSION_NOTES: Record<Exclude<LegacyStack, "unknown">, string> = {
+  "php-jquery": `## Legacy stack notes (PHP + jQuery)
+- Expect mysql_* / mysqli / PDO snippets, include/require composition and jQuery DOM manipulation.
+- mysql_* calls have no modern equivalent: route them through the central db module with parameterized queries.
+- Preserve XSS-safety: legacy echo of user input must become escaped/typed React output.`,
+
+  python2: `## Legacy stack notes (Python 2)
+- Expect print statements, xrange/iteritems, except X, e syntax, coding cookies and str/bytes confusion.
+- Modernize to Python 3 idioms: f-strings, pathlib, generators, explicit encoding.`,
+
+  django: `## Legacy stack notes (Django)
+- models.py classes map to SQLAlchemy 2.0 declarative models; add matching Pydantic schemas per model (ModelOut/ModelIn).
+- urls.py path patterns map to FastAPI APIRouter routes: convert <int:pk> style converters to typed path parameters.
+- views.py functions become route handlers; forms.py becomes Pydantic request models.
+- settings.py constants become pydantic-settings configuration read from the environment.
+- manage.py commands become small CLI entry points — note them in the plan.`,
+};
 
 // ---------------------------------------------------------------------------
 // Plan (phase 1 output)

@@ -46,6 +46,10 @@ function detectRole(rel: string): FileRole {
   const isCode = /\.(php|py|js|phtml)$/.test(lower);
   if (isCode && /(^|\/)(routes?|controllers?|views?|pages?|endpoints?)(\/|$)/.test(lower)) return "route";
   if (isCode && /(^|\/)api(\/|$)/.test(lower)) return "route";
+  // Django conventions (urls/views/forms are request handling; models are the domain layer)
+  if (/^(urls|views|forms)\.py$/.test(base)) return "route";
+  if (/^settings\.py$/.test(base)) return "config";
+  if (/(^|\/)models?\.py$/.test(lower) || /^(admin|apps)\.py$/.test(base)) return "shared";
   if (/\.(phtml|html|htm|tpl|hbs|ejs|twig|jinja|jinja2)$/.test(lower)) return "template";
   if (/\.(css|scss|sass|less)$/.test(lower)) return "style";
   if (/(^|\/)(test|tests|__tests__|spec)(\/|$)/.test(lower) || /\.(test|spec)\./.test(base)) return "test";
@@ -134,6 +138,51 @@ function detectStack(
   if (py2Signals > 0) py2Score += Math.min(35, py2Signals * 10);
   if (py3Signals > 0 && py2Signals === 0) py2Score = Math.max(0, py2Score - 10);
 
+  // --- Content markers: Django -----------------------------------------------
+  // Django projects are python-based, so they must be checked BEFORE the
+  // generic python2 verdict — a Django app is converted differently.
+  let djangoScore = 0;
+  if (has("manage.py")) {
+    djangoScore += 30;
+    evidence.push("manage.py present");
+  }
+  // wsgi.py/asgi.py live inside the project package (e.g. "proj/wsgi.py")
+  if (anyMatch(/(^|\/)wsgi\.py$/)) {
+    djangoScore += 10;
+    evidence.push("wsgi.py present");
+  }
+  if (anyMatch(/(^|\/)asgi\.py$/)) {
+    djangoScore += 10;
+    evidence.push("asgi.py present");
+  }
+  if (anyMatch(/(^|\/)urls\.py$/)) {
+    djangoScore += 15;
+    evidence.push("urls.py found (Django URLconf)");
+  }
+  if (anyMatch(/(^|\/)settings\.py$/)) {
+    djangoScore += 10;
+    evidence.push("settings.py found");
+  }
+  if (anyMatch(/(^|\/)models\.py$/)) djangoScore += 5;
+  if (anyMatch(/(^|\/)apps\.py$/)) djangoScore += 5;
+  for (const f of files) {
+    if (!f.rel.endsWith(".py")) continue;
+    const text = texts.get(f.rel);
+    if (!text) continue;
+    if (/from django(\.\w+)* import|import django\b/.test(text)) {
+      djangoScore += 10;
+      evidence.push(`django import: ${f.rel}`);
+      break;
+    }
+  }
+  for (const rel of ["requirements.txt", "setup.py"]) {
+    const text = texts.get(rel);
+    if (text && /django/i.test(text)) {
+      djangoScore += 10;
+      evidence.push(`django listed in ${rel}`);
+    }
+  }
+
   // --- Content markers: jQuery / client-side --------------------------------
   let jquerySignals = 0;
   for (const f of files) {
@@ -162,14 +211,23 @@ function detectStack(
   // --- Decide ----------------------------------------------------------------
   let stack: LegacyStack = "unknown";
   let confidence = 0;
-  if (phpScore >= 25 && phpScore > py2Score + 10) {
+  if (djangoScore >= 40 && djangoScore > phpScore + 10) {
+    stack = "django";
+    confidence = Math.min(0.99, 0.5 + djangoScore / 100);
+    libraries.add("django");
+  } else if (phpScore >= 25 && phpScore > py2Score + 10) {
     stack = "php-jquery";
     confidence = Math.min(0.99, 0.5 + phpScore / 100);
   } else if (py2Score >= 25 && py2Score > phpScore + 10) {
     stack = "python2";
     confidence = Math.min(0.99, 0.5 + py2Score / 100);
-  } else if (phpScore > 0 || py2Score > 0) {
-    stack = phpScore >= py2Score ? "php-jquery" : "python2";
+  } else if (phpScore > 0 || py2Score > 0 || djangoScore > 0) {
+    stack =
+      djangoScore >= phpScore && djangoScore >= py2Score
+        ? "django"
+        : phpScore >= py2Score
+          ? "php-jquery"
+          : "python2";
     confidence = 0.35;
     evidence.push("low-confidence: mixed or weak signals");
   }

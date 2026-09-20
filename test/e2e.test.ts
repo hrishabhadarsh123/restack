@@ -47,6 +47,7 @@ const _typeCheck: AnthropicClient = new MockClient([]) as unknown as AnthropicCl
 void _typeCheck;
 
 const PHP_APP = path.join(__dirname, "fixtures", "php-app");
+const DJANGO_APP = path.join(__dirname, "fixtures", "django-app");
 
 function fakePlan(scan: Awaited<ReturnType<typeof scanProject>>): MigrationPlan {
   return parsePlan(
@@ -81,6 +82,76 @@ function goodResponses(): string[] {
       fileBlock("app/users/page.tsx", "export default function Users() { return <table id=\"users-table\" />; }\n"),
   ];
 }
+
+describe("e2e django conversion (mocked Claude)", () => {
+  let outDir: string;
+
+  beforeEach(async () => {
+    outDir = await fsp.mkdtemp(path.join(os.tmpdir(), "restack-e2e-django-"));
+  });
+
+  it("converts the django fixture to fastapi with stack-specific prompt notes", async () => {
+    const scan = await scanProject(DJANGO_APP);
+    expect(scan.stack).toBe("django");
+
+    const plan = parsePlan(
+      JSON.stringify({
+        target: "fastapi",
+        summary: "Django blog to FastAPI",
+        decisions: [{ topic: "orm", choice: "SQLAlchemy 2.0 + Pydantic schemas" }],
+        dependencies: ["fastapi", "sqlalchemy"],
+        fileMappings: [
+          { source: "blog/models.py", targets: ["models.py", "schemas.py"], note: "ORM + schemas" },
+          { source: "blog/views.py", targets: ["routers/blog.py"], note: "views -> handlers" },
+          { source: "blog/forms.py", targets: ["routers/comments.py"], note: "form -> request model" },
+        ],
+        routeMappings: [{ from: "posts/<int:pk>/", to: "/posts/{pk}" }],
+        droppedFiles: [{ path: "templates/blog/post_list.html", reason: "replaced by API responses" }],
+        scaffoldFiles: [],
+        conversionOrder: [["blog/models.py"], ["blog/views.py", "blog/forms.py"]],
+        risks: [],
+      }),
+      "fastapi",
+    );
+
+    const client = new MockClient([
+      fileBlock("models.py", "from sqlalchemy.orm import DeclarativeBase\n") +
+        fileBlock("schemas.py", "from pydantic import BaseModel\n"),
+      fileBlock("routers/blog.py", "from fastapi import APIRouter\nrouter = APIRouter()\n") +
+        fileBlock("routers/comments.py", "from fastapi import APIRouter\n"),
+    ]);
+
+    const outcome = await runConverter(client, scan, plan, outDir, {
+      target: "fastapi",
+      model: "mock",
+      workers: 1,
+      verifyOverride: async () => ({ ok: true, errors: [] }),
+    });
+
+    expect(outcome.stats.filesConverted).toBe(3);
+    expect(outcome.stats.filesFailed).toBe(0);
+    expect(client.calls).toBe(2);
+
+    // Outputs written
+    const models = await fsp.readFile(path.join(outDir, "models.py"), "utf8");
+    expect(models).toContain("DeclarativeBase");
+    const router = await fsp.readFile(path.join(outDir, "routers", "blog.py"), "utf8");
+    expect(router).toContain("APIRouter");
+
+    // FastAPI static scaffold present
+    const reqs = await fsp.readFile(path.join(outDir, "requirements.txt"), "utf8");
+    expect(reqs).toContain("fastapi");
+    await fsp.access(path.join(outDir, "pyproject.toml"));
+
+    // System prompt carries the django stack notes + plan tables
+    const sys = client.received[0]!.system;
+    expect(sys).toContain("Legacy stack notes (Django)");
+    expect(sys).toContain("blog/models.py");
+    // User prompt carried the legacy source verbatim
+    const user1 = client.received[0]!.messages[0]!;
+    expect(typeof user1.content === "string" ? user1.content : "").toContain("class Post");
+  });
+});
 
 describe("e2e conversion (mocked Claude)", () => {
   let outDir: string;

@@ -17,6 +17,7 @@ it file-by-file into an idiomatic modern codebase:
 |---|---|
 | PHP / jQuery / PDO / mysql_* | **Next.js 15 (App Router) + TypeScript strict** |
 | Python 2 (print statements, old syntax) | **FastAPI + Pydantic v2 + SQLAlchemy 2.0** |
+| Django (models, urls, views, forms) | **FastAPI + Pydantic v2 + SQLAlchemy 2.0** |
 
 Your original project is never modified — all output goes to a separate folder.
 

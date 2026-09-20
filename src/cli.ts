@@ -48,6 +48,7 @@ function resolveTarget(explicit?: string, scan?: ScanResult): ModernTarget {
     process.exit(1);
   }
   if (scan.stack === "php-jquery") return "nextjs";
+  if (scan.stack === "django") return "fastapi";
   if (scan.stack === "python2") return "fastapi";
   logger.error("Could not detect the legacy stack — pass --target nextjs|fastapi explicitly.");
   process.exit(1);

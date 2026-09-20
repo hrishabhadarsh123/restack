@@ -4,6 +4,7 @@ import { scanProject, buildScanJsonReport } from "../src/scanner.js";
 
 const PHP_APP = path.join(__dirname, "fixtures", "php-app");
 const PY2_APP = path.join(__dirname, "fixtures", "py2-app");
+const DJANGO_APP = path.join(__dirname, "fixtures", "django-app");
 
 describe("scanProject", () => {
   it("detects the php-jquery stack on the PHP fixture", async () => {
@@ -79,6 +80,27 @@ describe("scanProject", () => {
 
     // No file contents leak into the report
     expect(JSON.stringify(parsed)).not.toContain("supersecret123");
+  });
+
+  it("detects django on the django fixture (distinct from plain python2)", async () => {
+    const scan = await scanProject(DJANGO_APP);
+    expect(scan.stack).toBe("django");
+    expect(scan.confidence).toBeGreaterThan(0.5);
+    expect(scan.libraries).toContain("django");
+    expect(scan.evidence.some((e) => e.includes("manage.py"))).toBe(true);
+    expect(scan.evidence.some((e) => e.includes("urls.py"))).toBe(true);
+  });
+
+  it("classifies django urls/views/forms as route, models as shared, settings as config", async () => {
+    const scan = await scanProject(DJANGO_APP);
+    const roles = new Map(scan.files.map((f) => [f.rel, f.role]));
+    expect(roles.get("proj/urls.py")).toBe("route");
+    expect(roles.get("blog/urls.py")).toBe("route");
+    expect(roles.get("blog/views.py")).toBe("route");
+    expect(roles.get("blog/forms.py")).toBe("route");
+    expect(roles.get("blog/models.py")).toBe("shared");
+    expect(roles.get("proj/settings.py")).toBe("config");
+    expect(roles.get("manage.py")).toBe("entry");
   });
 
   it("throws on a nonexistent root", async () => {

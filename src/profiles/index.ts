@@ -154,6 +154,13 @@ const FASTAPI_PLANNING_HINTS = `Plan for FastAPI + Pydantic v2 + SQLAlchemy 2.0:
 - DB layer (MySQLdb/psycopg2 raw) centralizes into database.py with SQLAlchemy engine + sessions.
 - Static/templates only if genuinely needed (Jinja2 via fastapi static files).`;
 
+const DJANGO_FASTAPI_HINTS = `When the legacy stack is Django:
+- models.py classes become SQLAlchemy 2.0 declarative models plus matching Pydantic schemas (ModelOut/ModelIn).
+- urls.py path patterns become APIRouter routes: <int:pk> converters become typed path parameters.
+- views.py functions become route handlers; forms.py becomes Pydantic request models.
+- settings.py constants become pydantic-settings environment configuration.
+- manage.py commands become small CLI entry points — note them in the plan.`;
+
 function fastapiStaticScaffold(): Array<{ path: string; content: string }> {
   return [
     {
@@ -198,7 +205,7 @@ const PROFILES: Record<ModernTarget, TargetProfile> = {
     id: "fastapi",
     label: "FastAPI + Pydantic v2",
     conventions: FASTAPI_CONVENTIONS + "\n\n" + FASTAPI_PLANNING_HINTS,
-    planningHints: FASTAPI_PLANNING_HINTS,
+    planningHints: FASTAPI_PLANNING_HINTS + "\n\n" + DJANGO_FASTAPI_HINTS,
     staticScaffold: fastapiStaticScaffold(),
     manifestPath: "requirements.txt",
     runInstructions: "cd <outDir> && python -m venv .venv && .venv/bin/pip install -r requirements.txt && .venv/bin/uvicorn main:app --reload",

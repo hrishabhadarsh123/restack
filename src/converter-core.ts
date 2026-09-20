@@ -106,7 +106,7 @@ export async function runConverter(
     `Conversion: ${batches.length} batch(es) across ${plan.conversionOrder.length} wave(s), ${opts.workers} worker(s)`,
   );
 
-  const system = buildConversionSystemPrompt(plan, opts.target);
+  const system = buildConversionSystemPrompt(plan, opts.target, scan.stack);
   const results: FileResult[] = [];
   let completedBatches = 0;
   const batchStats: BatchStats = { calls: 0 };
