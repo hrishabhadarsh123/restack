@@ -4,7 +4,7 @@
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1" />
   <title>CLI Reference — restack docs</title>
-  <meta name="description" content="Every restack command, flag and default: scan, plan, convert." />
+  <meta name="description" content="Every restack command, flag and default: scan, plan, convert, mcp." />
   <link rel="stylesheet" href="./styles.css" />
 </head>
 <body>
@@ -111,6 +111,55 @@
         <code>{a,b}</code> alternation — e.g.
         <code>--exclude "**/*.min.js" "**/legacy/**"</code>.
       </div>
+    </section>
+
+    <section>
+      <h2>restack mcp</h2>
+      <pre>restack mcp</pre>
+      <p>
+        Run the restack <a href="https://modelcontextprotocol.io">MCP</a> server on stdio so agent
+        platforms (Google Antigravity, Hermes Agent, Claude Code, Cursor, ...) can drive the
+        pipeline as tools. No flags besides <code>--verbose</code> — the server is configured by
+        the environment (provider keys) of the host process.
+      </p>
+      <table>
+        <tr><th>Tool</th><th>Arguments</th><th>Notes</th></tr>
+        <tr>
+          <td><code>restack_scan</code></td>
+          <td><code>projectRoot</code>, optional <code>includeGlobs</code>/<code>excludeGlobs</code></td>
+          <td>No API key needed</td>
+        </tr>
+        <tr>
+          <td><code>restack_plan</code></td>
+          <td><code>projectRoot</code>, optional <code>target</code>, <code>provider</code>, <code>model</code>, <code>maxCostUsd</code></td>
+          <td>Dry run — saves <code>.restack/plan.json</code></td>
+        </tr>
+        <tr>
+          <td><code>restack_convert</code></td>
+          <td><code>projectRoot</code>, optional <code>outDir</code>, <code>target</code>, <code>provider</code>, <code>model</code>, <code>workers</code>, <code>maxCostUsd</code>, <code>resume</code>, <code>review</code></td>
+          <td>Full conversion with verify/repair + checkpointing</td>
+        </tr>
+        <tr>
+          <td><code>restack_status</code></td>
+          <td>optional <code>outDir</code></td>
+          <td>Previous-run statuses, spend, what would resume</td>
+        </tr>
+      </table>
+      <p>
+        Each result carries an agent-facing summary plus a machine-readable
+        <code>_restack</code> JSON block (schema-versioned where the CLI supports
+        <code>--json</code>), so agents can chain <code>scan → plan → convert → status</code> and
+        react to real data. Human logs stay on stderr; the MCP stdio transport owns stdout.
+      </p>
+      <pre>{
+  "mcpServers": {
+    "restack": {
+      "command": "npx",
+      "args": ["-y", "restack-ai", "mcp"],
+      "env": { "ANTHROPIC_API_KEY": "sk-ant-..." }
+    }
+  }
+}</pre>
     </section>
 
     <section>

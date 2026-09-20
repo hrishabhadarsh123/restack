@@ -129,6 +129,52 @@ restack convert ./legacy-app --target fastapi --out ./converted \
 `--dry-run` shows the plan and exits without converting. `--review` adds a final cross-file
 consistency pass.
 
+## Use inside AI agents (MCP)
+
+restack ships a built-in [Model Context Protocol](https://modelcontextprotocol.io) server, so agent
+platforms — **Google Antigravity, Hermes Agent, Claude Code, Cursor, Windsurf, ...** — can drive
+the whole pipeline as tools instead of shelling out to the CLI:
+
+```bash
+restack mcp          # stdio transport (the standard for local agent tools)
+```
+
+| Tool | What it does |
+|---|---|
+| `restack_scan` | stack detection + file inventory + token estimate (no API key needed) |
+| `restack_plan` | structured migration plan (dry run) |
+| `restack_convert` | full conversion into `<outDir>` (verify + repair, resume support) |
+| `restack_status` | inspect a previous run: statuses, spend, what would resume |
+
+Example `mcpServers` config (Antigravity / Claude Code / Cursor / Hermes all use this shape):
+
+```json
+{
+  "mcpServers": {
+    "restack": {
+      "command": "npx",
+      "args": ["-y", "restack-ai", "mcp"],
+      "env": { "ANTHROPIC_API_KEY": "sk-ant-..." }
+    }
+  }
+}
+```
+
+Every tool returns an agent-facing summary plus a machine-readable `_restack` JSON block, so the
+agent can chain `scan → plan → convert → status` and react to real data (costs, waves, failures)
+instead of parsing prose.
+
+### SDK — embed restack in your own tooling
+
+```ts
+import { scanProject, runPlanner, runConverter, selectProvider, createClient } from "restack-ai";
+
+const scan = await scanProject("./legacy-app");
+const client = createClient(selectProvider("openai"), "gpt-5.2");
+const { plan } = await runPlanner(client, scan, { target: "nextjs", model: "gpt-5.2" });
+await runConverter(client, scan, plan, "./converted", { target: "nextjs", model: "gpt-5.2", workers: 2 });
+```
+
 ## How the 200k window is used
 
 ```
@@ -162,7 +208,7 @@ drives both cost estimates and the packer's context budget (gpt-5.x: 400k window
 
 ```
 src/
-  cli.ts            scan | plan | convert commands
+  cli.ts            scan | plan | convert | mcp commands
   scanner.ts        walk + stack detection + roles + token estimate
   packer.ts         context budget manager (verbatim vs summarized vs omitted)
   planner.ts        pass 1: structured MigrationPlan (zod-validated)
@@ -172,6 +218,8 @@ src/
   state.ts          checkpoint/resume + plan persistence + CostLimitError
   providers/        anthropic | openai | gemini clients + env detection + factory
   profiles/         nextjs + fastapi: conventions, scaffold, verification
+  mcp.ts            MCP server: pipeline as agent tools over stdio
+  index.ts          SDK entry for embedding restack programmatically
 test/
   fixtures/         mini PHP/jQuery + Python 2 apps
   *.test.ts         scanner / packer / planner / converter unit + e2e tests

@@ -71,3 +71,6 @@ jobs:
           grep -q "OPENAI_API_KEY" prov-err.txt || { cat prov-err.txt; exit 1; }
           echo "plan/convert --json contract OK (keyed runs emit schema-versioned reports/events on stdout)"
           rm -f plan-out.json plan-err.txt conv-out.ndjson conv-err.txt prov-out.txt prov-err.txt
+
+      - name: MCP smoke (stdio JSON-RPC without API key)
+        run: node test/mcp-smoke.mjs

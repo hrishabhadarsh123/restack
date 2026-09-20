@@ -38,8 +38,7 @@ import {
 } from "./types.js";
 import { logger } from "./util/logger.js";
 import { formatCount, formatCost, formatDuration, formatPercent, formatTokens, printTable } from "./util/format.js";
-
-const VERSION = "0.1.0";
+import { VERSION } from "./version.js";
 
 function resolveTarget(explicit?: string, scan?: ScanResult): ModernTarget {
   if (explicit) {
@@ -466,6 +465,20 @@ function handleRunError(err: unknown, client?: ModelClient): never {
   }
   process.exit(1);
 }
+
+// ---------------------------------------------------------------------------
+// mcp
+// ---------------------------------------------------------------------------
+program
+  .command("mcp")
+  .description("Run the restack MCP server on stdio (Antigravity, Hermes Agent, Claude Code, Cursor, ...)")
+  .option("--verbose", "debug logging")
+  .action(async (opts: CommonOpts) => {
+    applyCommon(opts);
+    // Lazy import: keep CLI startup fast for the regular commands.
+    const { runMcpServer } = await import("./mcp.js");
+    await runMcpServer();
+  });
 
 program.parseAsync(process.argv).catch((err) => {
   logger.error((err as Error).message);

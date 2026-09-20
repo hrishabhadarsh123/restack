@@ -9,7 +9,15 @@
   "bin": {
     "restack": "./dist/cli.js"
   },
-  "main": "./dist/cli.js",
+  "main": "./dist/index.js",
+  "types": "./dist/index.d.ts",
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "import": "./dist/index.js"
+    },
+    "./mcp": "./dist/mcp.js"
+  },
   "repository": {
     "type": "git",
     "url": "git+https://github.com/hrishabhadarsh123/restack.git"
@@ -24,7 +32,7 @@
     "LICENSE"
   ],
   "scripts": {
-    "build": "tsup",
+    "build": "tsup && tsc -p tsconfig.build.json",
     "dev": "tsup --watch",
     "typecheck": "tsc --noEmit",
     "test": "vitest run",
@@ -42,12 +50,15 @@
     "openai",
     "gemini",
     "openrouter",
-    "converter"
+    "converter",
+    "mcp",
+    "ai-agent"
   ],
   "license": "MIT",
   "dependencies": {
     "@anthropic-ai/sdk": "^0.126.0",
     "@google/genai": "^2.23.0",
+    "@modelcontextprotocol/sdk": "^1.30.0",
     "commander": "^14.0.0",
     "openai": "^7.20.0",
     "ora": "^9.4.1",
