@@ -72,11 +72,12 @@
     <section>
       <h2>restack plan</h2>
       <pre>restack plan &lt;projectRoot&gt; [--target nextjs|fastapi]</pre>
-      <p>Generate and save the migration plan to <code>&lt;outDir&gt;/.restack/plan.json</code> (one Claude call).</p>
+      <p>Generate and save the migration plan to <code>&lt;outDir&gt;/.restack/plan.json</code> (one planning call).</p>
       <table>
         <tr><th>Flag</th><th>Description</th><th>Default</th></tr>
         <tr><td><code>--target &lt;t&gt;</code></td><td><code>nextjs</code> | <code>fastapi</code></td><td>auto-detected</td></tr>
-        <tr><td><code>--model &lt;id&gt;</code></td><td>Claude model id</td><td><code>claude-sonnet-4-5</code></td></tr>
+        <tr><td><code>--provider &lt;id&gt;</code></td><td><code>anthropic</code> | <code>openai</code> | <code>google</code></td><td>auto-detected from env</td></tr>
+        <tr><td><code>--model &lt;id&gt;</code></td><td>Model id (any provider)</td><td>provider default</td></tr>
         <tr><td><code>--out &lt;dir&gt;</code></td><td>Where to write <code>.restack/plan.json</code></td><td><code>./converted</code></td></tr>
         <tr><td><code>--max-cost &lt;usd&gt;</code></td><td>Abort if the estimated spend would exceed this</td><td><code>5</code></td></tr>
         <tr><td><code>--json</code></td><td>Machine-readable JSON report on stdout (logs stay on stderr) — stack, target, plan hash, mappings, waves, risks, cost</td><td>off</td></tr>
@@ -93,7 +94,8 @@
         <tr><th>Flag</th><th>Description</th><th>Default</th></tr>
         <tr><td><code>--target &lt;t&gt;</code></td><td><code>nextjs</code> | <code>fastapi</code></td><td>auto-detected</td></tr>
         <tr><td><code>--out &lt;dir&gt;</code></td><td>Output directory for the converted project</td><td><code>./converted</code></td></tr>
-        <tr><td><code>--model &lt;id&gt;</code></td><td>Claude model id</td><td><code>claude-sonnet-4-5</code></td></tr>
+        <tr><td><code>--provider &lt;id&gt;</code></td><td><code>anthropic</code> | <code>openai</code> | <code>google</code></td><td>auto-detected from env</td></tr>
+        <tr><td><code>--model &lt;id&gt;</code></td><td>Model id (any provider)</td><td>provider default</td></tr>
         <tr><td><code>--workers &lt;n&gt;</code></td><td>Parallel conversion batches (clamped to 1–8)</td><td><code>2</code></td></tr>
         <tr><td><code>--max-cost &lt;usd&gt;</code></td><td>Hard spend limit; aborts before a call that would exceed it</td><td><code>20</code></td></tr>
         <tr><td><code>--dry-run</code></td><td>Show the plan (summary, waves, decisions) and exit without converting</td><td>off</td></tr>
@@ -112,16 +114,30 @@
     </section>
 
     <section>
-      <h2>Environment variables</h2>
+      <h2>Providers &amp; environment variables</h2>
+      <p>
+        <code>plan</code>/<code>convert</code> need exactly one provider key — detection order:
+        <code>anthropic</code> → <code>openai</code> → <code>google</code>. Force one with
+        <code>--provider</code>.
+      </p>
+      <table>
+        <tr><th>Provider</th><th>Env var(s)</th><th>Default model</th></tr>
+        <tr><td>Anthropic (Claude)</td><td><code>ANTHROPIC_API_KEY</code></td><td><code>claude-sonnet-4-5</code></td></tr>
+        <tr><td>OpenAI (GPT)</td><td><code>OPENAI_API_KEY</code></td><td><code>gpt-5.2</code></td></tr>
+        <tr><td>OpenRouter / OpenAI-compatible</td><td><code>OPENROUTER_API_KEY</code> (+ <code>OPENROUTER_BASE_URL</code>)</td><td>pass <code>--model</code></td></tr>
+        <tr><td>Google (Gemini)</td><td><code>GEMINI_API_KEY</code> or <code>GOOGLE_API_KEY</code></td><td><code>gemini-3-pro</code></td></tr>
+      </table>
       <table>
         <tr><th>Variable</th><th>Description</th><th>Required</th></tr>
-        <tr><td><code>ANTHROPIC_API_KEY</code></td><td>API key for <code>plan</code>/<code>convert</code></td><td>yes (those commands)</td></tr>
         <tr><td><code>ANTHROPIC_AUTH_TOKEN</code></td><td>Bearer token — gateway/proxy environments</td><td>no</td></tr>
-        <tr><td><code>ANTHROPIC_BASE_URL</code></td><td>API base URL override (picked up by the SDK)</td><td>no</td></tr>
+        <tr><td><code>ANTHROPIC_BASE_URL</code></td><td>Anthropic base URL override (picked up by the SDK)</td><td>no</td></tr>
+        <tr><td><code>OPENAI_BASE_URL</code></td><td>Endpoint override for OpenAI-compatible APIs (OpenRouter, Groq, Together, Ollama, …)</td><td>no</td></tr>
       </table>
       <p>
-        Models: <code>claude-sonnet-4-5</code> (default), <code>claude-opus-4-1</code> (highest
-        quality), <code>claude-haiku-4-5</code> (cheapest) — pricing used for estimates lives in
+        Models: Anthropic <code>claude-sonnet-4-5</code> / <code>claude-opus-4-1</code> /
+        <code>claude-haiku-4-5</code>; OpenAI <code>gpt-5.2</code> / <code>gpt-5.1</code> /
+        <code>gpt-4o</code>; Gemini <code>gemini-3-pro</code> / <code>gemini-3-flash</code> —
+        pricing used for estimates and packer budgets lives in
         <code>src/util/tokens.ts</code>.
       </p>
     </section>

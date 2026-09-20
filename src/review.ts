@@ -3,7 +3,7 @@
  * Claude to fix cross-file inconsistencies after conversion.
  */
 import { promises as fsp } from "node:fs";
-import type { AnthropicClient } from "./anthropic.js";
+import type { ModelClient } from "./providers/types.js";
 import { getProfile } from "./profiles/index.js";
 import type { MigrationPlan, ModernTarget } from "./types.js";
 import { logger } from "./util/logger.js";
@@ -46,7 +46,7 @@ async function loadConvertedFiles(outDir: string): Promise<Array<{ rel: string; 
 }
 
 export async function runReview(
-  client: AnthropicClient,
+  client: ModelClient,
   plan: MigrationPlan,
   outDir: string,
   opts: ReviewOptions,

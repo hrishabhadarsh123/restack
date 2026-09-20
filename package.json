@@ -1,7 +1,7 @@
 {
   "name": "restack-ai",
   "version": "0.1.0",
-  "description": "Convert legacy projects (PHP/jQuery, Python 2) to modern stacks (Next.js, FastAPI) using Claude's long context window",
+  "description": "Convert legacy projects (PHP/jQuery, Python 2, Django) to modern stacks (Next.js, FastAPI) using any frontier model's long context window",
   "type": "module",
   "engines": {
     "node": ">=20"
@@ -39,12 +39,17 @@
     "nextjs",
     "fastapi",
     "claude",
+    "openai",
+    "gemini",
+    "openrouter",
     "converter"
   ],
   "license": "MIT",
   "dependencies": {
     "@anthropic-ai/sdk": "^0.126.0",
+    "@google/genai": "^2.23.0",
     "commander": "^14.0.0",
+    "openai": "^7.20.0",
     "ora": "^9.4.1",
     "picocolors": "^1.1.1",
     "zod": "^4.1.5"

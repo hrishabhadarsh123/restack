@@ -5,7 +5,6 @@
  */
 import path from "node:path";
 import { promises as fsp } from "node:fs";
-import type { AnthropicClient } from "./anthropic.js";
 import { getProfile } from "./profiles/index.js";
 import { STACK_CONVERSION_NOTES } from "./types.js";
 import type { FileResult, GeneratedFile, LegacyStack, MigrationPlan, ModernTarget, ScanResult } from "./types.js";

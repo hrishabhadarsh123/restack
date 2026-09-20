@@ -5,7 +5,7 @@
 [![Node](https://img.shields.io/node/v/restack-ai)](https://www.npmjs.com/package/restack-ai)
 [![PRs welcome](https://img.shields.io/badge/PRs-welcome-brightgreen.svg)](CONTRIBUTING.md)
 
-**Legacy → modern stack converter, powered by Claude's 200k context window.**
+**Legacy → modern stack converter, powered by any frontier model's 200k+ context window.**
 
 📖 **Docs site:** [hrishabhadarsh123.github.io/restack](https://hrishabhadarsh123.github.io/restack/) — overview, architecture deep-dive & a full [PHP→Next.js walkthrough](https://hrishabhadarsh123.github.io/restack/walkthrough).
 
@@ -21,6 +21,15 @@ it file-by-file into an idiomatic modern codebase:
 
 Your original project is never modified — all output goes to a separate folder.
 
+Works with every major model provider — set one key (auto-detected) or force with `--provider`:
+
+| Provider | Env var | Default model |
+|---|---|---|
+| Anthropic (Claude) | `ANTHROPIC_API_KEY` | `claude-sonnet-4-5` |
+| OpenAI (GPT) | `OPENAI_API_KEY` | `gpt-5.2` |
+| OpenRouter / OpenAI-compatible | `OPENROUTER_API_KEY` (+ `OPENROUTER_BASE_URL`) | pass `--model` |
+| Google (Gemini) | `GEMINI_API_KEY` or `GOOGLE_API_KEY` | `gemini-3-pro` |
+
 ## Install / build
 
 Use without installing (after publishing, `npx restack-ai ...` works directly):
@@ -31,7 +40,7 @@ git clone https://github.com/hrishabhadarsh123/restack.git
 cd restack
 npm install
 npm run build          # dist/cli.js
-npm test               # vitest (unit + e2e with mocked Claude — no API key needed)
+npm test               # vitest (unit + e2e with mocked model clients — no API key needed)
 npm run typecheck
 node dist/cli.js --help
 ```
@@ -42,14 +51,15 @@ node dist/cli.js --help
 ## Quick start
 
 ```bash
-export ANTHROPIC_API_KEY=sk-ant-...
+# pick ONE provider key — auto-detected, or force with --provider
+export ANTHROPIC_API_KEY=sk-ant-...   # or OPENAI_API_KEY / GEMINI_API_KEY / OPENROUTER_API_KEY
 
 # 1. Dry analysis — no API key needed
 restack scan ./legacy-app
 #   Stack: php-jquery (confidence 82%)
 #   estimated tokens  48.3k          → fits in one 200k window
 
-# 2. Plan only (one big Claude call)
+# 2. Plan only (one big planning call)
 restack plan ./legacy-app --target nextjs
 
 # 3. Full conversion
@@ -84,7 +94,7 @@ stream discipline everywhere: JSON on stdout, human logs on stderr.
 
 ### `restack plan <root> [--target t]`
 
-Packs as many files as fit into one Claude call — entry/config/routes/shared first, oversized
+Packs as many files as fit into one planning call — entry/config/routes/shared first, oversized
 files summarized head+tail — and returns a structured **MigrationPlan**:
 
 - architecture decisions for *this* project
@@ -105,7 +115,7 @@ Runs plan → conversion → (optional) review:
   parser extracts them and refuses path traversal.
 - **Verify + repair**: each batch is verified — `tsc --noEmit` for Next.js output (bracket-balance
   fallback when no compiler is available), `ast.parse` + import smoke test for Python — and a
-  bounded repair round feeds compiler errors back to Claude.
+  bounded repair round feeds compiler errors back to the model.
 - **Checkpoint/resume**: progress is persisted to `.restack/state.json` after every batch;
   `--resume` skips already-converted sources and reuses the saved plan.
 - **Cost guard**: `--max-cost` (default $20) aborts before a call that would exceed the budget.
@@ -113,7 +123,7 @@ Runs plan → conversion → (optional) review:
 
 ```bash
 restack convert ./legacy-app --target fastapi --out ./converted \
-  --model claude-sonnet-4-5 --workers 3 --max-cost 15 --review
+  --provider openai --model gpt-5.2 --workers 3 --max-cost 15 --review
 ```
 
 `--dry-run` shows the plan and exits without converting. `--review` adds a final cross-file
@@ -137,12 +147,16 @@ cache-read prices (~10% of input) for the stable plan context.
 
 | Env var | Purpose |
 |---|---|
-| `ANTHROPIC_API_KEY` | required for `plan` / `convert` |
+| `ANTHROPIC_API_KEY` | Anthropic Claude key (highest detection priority) |
+| `OPENAI_API_KEY` / `OPENROUTER_API_KEY` | OpenAI, or any OpenAI-compatible gateway |
+| `GEMINI_API_KEY` / `GOOGLE_API_KEY` | Google Gemini |
+| `OPENAI_BASE_URL` | endpoint override for OpenAI-compatible APIs (OpenRouter, Groq, Together, Ollama, …) |
 | `ANTHROPIC_AUTH_TOKEN` | optional Bearer token (gateway/proxy environments) |
-| `ANTHROPIC_BASE_URL` | optional API base URL override (picked up by the SDK) |
+| `ANTHROPIC_BASE_URL` | optional Anthropic base URL override (picked up by the SDK) |
 
-Models: `claude-sonnet-4-5` (default), `claude-opus-4-1`, `claude-haiku-4-5` — see
-`src/util/tokens.ts` for the pricing table used by cost estimates.
+Defaults: `claude-sonnet-4-5`, `gpt-5.2`, `gemini-3-pro` — override with `--model` (a model from
+another provider's family triggers a warning). Pricing per model lives in `src/util/tokens.ts` and
+drives both cost estimates and the packer's context budget (gpt-5.x: 400k window, Gemini: 1M).
 
 ## Layout
 
@@ -156,7 +170,7 @@ src/
   converter-core.ts pass 2: waves, verify/repair loop, scaffold writing
   review.ts         pass 3 (optional): cross-file consistency fixes
   state.ts          checkpoint/resume + plan persistence + CostLimitError
-  anthropic.ts      SDK wrapper: retries, caching, usage/cost accounting
+  providers/        anthropic | openai | gemini clients + env detection + factory
   profiles/         nextjs + fastapi: conventions, scaffold, verification
 test/
   fixtures/         mini PHP/jQuery + Python 2 apps

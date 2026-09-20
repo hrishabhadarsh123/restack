@@ -6,12 +6,14 @@ import { scanProject } from "../src/scanner.js";
 import { runConverter } from "../src/converter-core.js";
 import { parsePlan, buildPlanningPrompt } from "../src/planner.js";
 import { packContext } from "../src/packer.js";
-import type { AnthropicClient, CallOptions, CallResult } from "../src/anthropic.js";
+import type { CallOptions, CallResult, ModelClient } from "../src/providers/types.js";
 import { pricingFor } from "../src/util/tokens.js";
 import type { MigrationPlan } from "../src/types.js";
 
-/** Minimal AnthropicClient stand-in with scripted responses. */
-class MockClient {
+/** Minimal ModelClient stand-in with scripted responses. */
+class MockClient implements ModelClient {
+  readonly provider = "anthropic" as const;
+  readonly model = "mock";
   calls = 0;
   usd = 0;
   inputTokens = 0;
@@ -43,7 +45,7 @@ class MockClient {
 }
 
 // The mock only needs the shape used by runConverter — asserted structurally.
-const _typeCheck: AnthropicClient = new MockClient([]) as unknown as AnthropicClient;
+const _typeCheck: ModelClient = new MockClient([]);
 void _typeCheck;
 
 const PHP_APP = path.join(__dirname, "fixtures", "php-app");

@@ -1,7 +1,9 @@
 #!/usr/bin/env node
 /**
- * restack — convert legacy projects (PHP/jQuery, Python 2) to modern stacks
- * (Next.js + TypeScript, FastAPI) using Claude's long context window.
+ * restack — convert legacy projects (PHP/jQuery, Python 2, Django) to modern
+ * stacks (Next.js + TypeScript, FastAPI) using a frontier model's long
+ * context window: Anthropic Claude, OpenAI GPT, Google Gemini, or any
+ * OpenAI-compatible endpoint.
  */
 import { Command } from "commander";
 import pc from "picocolors";
@@ -12,7 +14,13 @@ import { runPlanner, buildPlanJsonReport } from "./planner.js";
 import { runConverter } from "./converter-core.js";
 import { buildConversionBatches } from "./converter.js";
 import { runReview } from "./review.js";
-import { AnthropicClient } from "./anthropic.js";
+import {
+  selectProvider,
+  createClient,
+  warnModelMismatch,
+  DEFAULT_MODELS,
+} from "./providers/index.js";
+import type { ModelClient } from "./providers/types.js";
 import {
   loadState,
   saveState,
@@ -33,17 +41,6 @@ import { formatCount, formatCost, formatDuration, formatPercent, formatTokens, p
 
 const VERSION = "0.1.0";
 
-function requireApiKey(): string {
-  const key = process.env.ANTHROPIC_API_KEY;
-  if (!key) {
-    logger.error("ANTHROPIC_API_KEY environment variable is not set.");
-    logger.info("Get a key at https://console.anthropic.com/ and run:");
-    logger.info("  export ANTHROPIC_API_KEY=sk-ant-...");
-    process.exit(1);
-  }
-  return key;
-}
-
 function resolveTarget(explicit?: string, scan?: ScanResult): ModernTarget {
   if (explicit) {
     if (explicit === "nextjs" || explicit === "fastapi") return explicit;
@@ -62,6 +59,7 @@ function resolveTarget(explicit?: string, scan?: ScanResult): ModernTarget {
 }
 
 interface CommonOpts {
+  provider?: string;
   model?: string;
   verbose?: boolean;
   maxCost?: string;
@@ -74,7 +72,9 @@ function applyCommon(opts: CommonOpts): void {
 const program = new Command();
 program
   .name("restack")
-  .description("Convert legacy projects to modern stacks with Claude's 200k context window")
+  .description(
+    "Convert legacy projects to modern stacks with a frontier model's 200k+ context window (Claude, GPT, Gemini)",
+  )
   .version(VERSION);
 
 // ---------------------------------------------------------------------------
@@ -142,25 +142,33 @@ program
   .description("Generate (and save) a migration plan without converting")
   .argument("<projectRoot>", "path to the legacy project")
   .option("--target <target>", "nextjs | fastapi (auto-detected if omitted)")
-  .option("--model <model>", "Claude model id", "claude-sonnet-4-5")
+  .option("--provider <id>", "anthropic | openai | google (auto-detected from env)")
+  .option("--model <model>", "model id (provider default if omitted)")
   .option("--out <dir>", "where to write .restack/plan.json (defaults to ./converted)")
   .option("--max-cost <usd>", "abort if estimated spend exceeds this", "5")
   .option("--json", "print a machine-readable JSON report on stdout (log output stays on stderr)")
   .option("--verbose", "debug logging")
   .action(async (projectRoot: string, opts: CommonOpts & { target?: string; out?: string; json?: boolean }) => {
     applyCommon(opts);
-    const apiKey = requireApiKey();
+    const sel = selectProvider(opts.provider);
+    if (!sel) process.exit(1);
+    const model = opts.model ?? DEFAULT_MODELS[sel.id];
+    warnModelMismatch(sel, model);
     const scan = await scanProject(projectRoot);
     const target = resolveTarget(opts.target, scan);
     const outDir = path.resolve(opts.out ?? "converted");
     const maxCost = Number(opts.maxCost ?? 5);
 
     logger.info(`${pc.bold("restack plan")} — ${scan.stack} → ${target}`);
-    logger.info(pc.dim(`Model: ${opts.model ?? "claude-sonnet-4-5"} · max cost: ${formatCost(maxCost)}`));
+    logger.info(
+      pc.dim(
+        `Provider: ${sel.id}${sel.baseURL ? ` (via ${sel.baseURL})` : ""} · model: ${model} · max cost: ${formatCost(maxCost)}`,
+      ),
+    );
 
-    const client = new AnthropicClient(apiKey, opts.model ?? "claude-sonnet-4-5");
+    const client = createClient(sel, model);
     try {
-      const outcome = await runPlanner(client, scan, { target, model: opts.model ?? "claude-sonnet-4-5", maxCostUsd: maxCost });
+      const outcome = await runPlanner(client, scan, { target, model, maxCostUsd: maxCost });
       await savePlan(outDir, outcome.plan);
       const plan = outcome.plan;
       if (opts.json) {
@@ -214,7 +222,8 @@ program
   .argument("<projectRoot>", "path to the legacy project")
   .option("--target <target>", "nextjs | fastapi (auto-detected if omitted)")
   .option("--out <dir>", "output directory for the converted project", "converted")
-  .option("--model <model>", "Claude model id", "claude-sonnet-4-5")
+  .option("--provider <id>", "anthropic | openai | google (auto-detected from env)")
+  .option("--model <model>", "model id (provider default if omitted)")
   .option("--workers <n>", "parallel conversion batches", "2")
   .option("--max-cost <usd>", "hard spend limit in USD", "20")
   .option("--dry-run", "show the plan and exit without converting")
@@ -236,7 +245,10 @@ program
     exclude?: string[];
   }) => {
     applyCommon(opts);
-    const model = opts.model ?? "claude-sonnet-4-5";
+    const sel = selectProvider(opts.provider);
+    if (!sel) process.exit(1);
+    const model = opts.model ?? DEFAULT_MODELS[sel.id];
+    warnModelMismatch(sel, model);
     const outDir = path.resolve(opts.out ?? "converted");
     const maxCost = Number(opts.maxCost ?? 20);
     const workers = Math.max(1, Math.min(8, Number(opts.workers ?? 2)));
@@ -246,14 +258,17 @@ program
     const profile = getProfile(target);
 
     logger.info(`${pc.bold("restack convert")} — ${scan.stack} → ${target}`);
-    logger.info(pc.dim(`Output: ${outDir} · model: ${model} · workers: ${workers} · max cost: ${formatCost(maxCost)}`));
+    logger.info(
+      pc.dim(
+        `Output: ${outDir} · provider: ${sel.id}${sel.baseURL ? ` (via ${sel.baseURL})` : ""} · model: ${model} · workers: ${workers} · max cost: ${formatCost(maxCost)}`,
+      ),
+    );
 
     if (scan.excludedSensitive.length > 0) {
       logger.warn(`Excluding ${scan.excludedSensitive.length} sensitive file(s) from context`);
     }
 
-    const apiKey = requireApiKey();
-    const client = new AnthropicClient(apiKey, model);
+    const client = createClient(sel, model);
     const existingState = await loadState(outDir);
 
     // JSON event stream: the run event carries the resolved wave/batch shape
@@ -439,7 +454,7 @@ program
     }
   });
 
-function handleRunError(err: unknown, client?: AnthropicClient): never {
+function handleRunError(err: unknown, client?: ModelClient): never {
   if (err instanceof CostLimitError) {
     logger.error(err.message);
     if (client) logger.info(pc.dim(`Spent so far: ${formatCost(client.usd)}`));

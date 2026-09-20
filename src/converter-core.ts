@@ -4,7 +4,7 @@
  */
 import path from "node:path";
 import { promises as fsp } from "node:fs";
-import type { AnthropicClient } from "./anthropic.js";
+import type { ModelClient } from "./providers/types.js";
 import { getProfile } from "./profiles/index.js";
 import type { ConvertStats, FileResult, GeneratedFile, MigrationPlan, ModernTarget, ScanResult } from "./types.js";
 import { logger } from "./util/logger.js";
@@ -76,7 +76,7 @@ async function fileExists(abs: string): Promise<boolean> {
  * concurrency; each batch is verified and repaired up to maxRepairRounds.
  */
 export async function runConverter(
-  client: AnthropicClient,
+  client: ModelClient,
   scan: ScanResult,
   plan: MigrationPlan,
   outDir: string,

@@ -59,8 +59,15 @@ jobs:
           test "$rc" -eq 1 || { echo "expected exit 1 without API key, got $rc"; exit 1; }
           test ! -s plan-out.json || { echo "plan --json must not write stdout without a key"; exit 1; }
           grep -q "ANTHROPIC_API_KEY" plan-err.txt || { cat plan-err.txt; exit 1; }
+          grep -q "OPENAI_API_KEY" plan-err.txt || { echo "multi-provider guidance missing OPENAI_API_KEY"; exit 1; }
+          grep -q "GEMINI_API_KEY" plan-err.txt || { echo "multi-provider guidance missing GEMINI_API_KEY"; exit 1; }
           node dist/cli.js convert test/fixtures/php-app --json > conv-out.ndjson 2> conv-err.txt && rc=$? || rc=$?
           test "$rc" -eq 1 || { echo "expected exit 1 without API key, got $rc"; exit 1; }
           test ! -s conv-out.ndjson || { echo "convert --json must not write stdout without a key"; exit 1; }
+          # explicit --provider with the matching key absent must also fail cleanly
+          node dist/cli.js plan test/fixtures/php-app --provider openai > prov-out.txt 2> prov-err.txt && rc=$? || rc=$?
+          test "$rc" -eq 1 || { echo "expected exit 1 for --provider openai without key, got $rc"; exit 1; }
+          test ! -s prov-out.txt || { echo "provider-fail must not write stdout"; exit 1; }
+          grep -q "OPENAI_API_KEY" prov-err.txt || { cat prov-err.txt; exit 1; }
           echo "plan/convert --json contract OK (keyed runs emit schema-versioned reports/events on stdout)"
-          rm -f plan-out.json plan-err.txt conv-out.ndjson conv-err.txt
+          rm -f plan-out.json plan-err.txt conv-out.ndjson conv-err.txt prov-out.txt prov-err.txt

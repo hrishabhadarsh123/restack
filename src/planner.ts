@@ -2,7 +2,7 @@
  * Planner (pass 1): packs the whole project into one big Claude call and gets
  * back a structured MigrationPlan (validated with zod).
  */
-import type { AnthropicClient } from "./anthropic.js";
+import type { ModelClient } from "./providers/types.js";
 import { packContext } from "./packer.js";
 import { getProfile } from "./profiles/index.js";
 import {
@@ -68,7 +68,7 @@ interface MigrationPlan {
 }
 
 export async function runPlanner(
-  client: AnthropicClient,
+  client: ModelClient,
   scan: ScanResult,
   opts: PlanOptions,
 ): Promise<PlanOutcome> {
