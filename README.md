@@ -118,6 +118,10 @@ Runs plan → conversion → (optional) review:
   bounded repair round feeds compiler errors back to the model.
 - **Checkpoint/resume**: progress is persisted to `.restack/state.json` after every batch;
   `--resume` skips already-converted sources and reuses the saved plan.
+- **Interactive mode**: `restack convert --interactive` (and `plan --interactive`) reviews the
+  plan in the terminal before spending money — toggle per-file inclusion, confirm/trim route
+  mappings, see a cost estimate for the selected subset. Selections are checkpointed so
+  `--resume` reproduces the same subset; without a TTY it falls back to the plain flow (CI-safe).
 - **Cost guard**: `--max-cost` (default $20) aborts before a call that would exceed the budget.
   Exponential backoff on 429/5xx.
 

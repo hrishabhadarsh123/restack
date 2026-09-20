@@ -82,6 +82,7 @@
         <tr><td><code>--out &lt;dir&gt;</code></td><td>Where to write <code>.restack/plan.json</code></td><td><code>./converted</code></td></tr>
         <tr><td><code>--max-cost &lt;usd&gt;</code></td><td>Abort if the estimated spend would exceed this</td><td><code>5</code></td></tr>
         <tr><td><code>--json</code></td><td>Machine-readable JSON report on stdout (logs stay on stderr) — stack, target, plan hash, mappings, waves, risks, cost</td><td>off</td></tr>
+        <tr><td><code>--interactive</code></td><td>Review and trim the plan before it is saved: toggle per-file inclusion, trim routes, cost preview for the subset. TTY required — falls back with a warning otherwise; mutually exclusive with <code>--json</code></td><td>off</td></tr>
         <tr><td><code>--verbose</code></td><td>Debug logging</td><td>off</td></tr>
       </table>
       <pre>restack plan ./legacy-app --json | jq '{stack, target, planHash, waves: (.waves | length)}'</pre>
@@ -100,8 +101,9 @@
         <tr><td><code>--workers &lt;n&gt;</code></td><td>Parallel conversion batches (clamped to 1–8)</td><td><code>2</code></td></tr>
         <tr><td><code>--max-cost &lt;usd&gt;</code></td><td>Hard spend limit; aborts before a call that would exceed it</td><td><code>20</code></td></tr>
         <tr><td><code>--dry-run</code></td><td>Show the plan (summary, waves, decisions) and exit without converting</td><td>off</td></tr>
-        <tr><td><code>--json</code></td><td>Stream newline-delimited JSON events (<code>run</code>, <code>wave</code>, <code>batch_start</code>, <code>batch_complete</code>, <code>file</code>, <code>warning</code>, <code>summary</code>) on stdout, each tagged with <code>schema</code>; logs stay on stderr. Mutually exclusive with <code>--interactive</code> when it ships.</td><td>off</td></tr>
+        <tr><td><code>--json</code></td><td>Stream newline-delimited JSON events (<code>run</code>, <code>wave</code>, <code>batch_start</code>, <code>batch_complete</code>, <code>file</code>, <code>warning</code>, <code>summary</code>) on stdout, each tagged with <code>schema</code>; logs stay on stderr. Mutually exclusive with <code>--interactive</code>.</td><td>off</td></tr>
         <tr><td><code>--resume</code></td><td>Reuse the saved plan and skip sources already converted in <code>.restack/state.json</code></td><td>off</td></tr>
+        <tr><td><code>--interactive</code></td><td>Review the plan in the terminal before converting: toggle per-file inclusion, confirm/trim route mappings, see a cost estimate for the selected subset. Selections are recorded in <code>.restack/state.json</code> so <code>--resume</code> reproduces the same subset. Falls back to non-interactive mode with a warning when stdout is not a TTY; mutually exclusive with <code>--json</code></td><td>off</td></tr>
         <tr><td><code>--review</code></td><td>Run a final cross-file consistency review pass</td><td>off</td></tr>
         <tr><td><code>--include &lt;glob...&gt;</code></td><td>Only include files matching these globs</td><td>all source files</td></tr>
         <tr><td><code>--exclude &lt;glob...&gt;</code></td><td>Exclude files matching these globs</td><td>—</td></tr>
@@ -111,6 +113,28 @@
         Globs support <code>**</code>, <code>*</code>, <code>?</code> and
         <code>{a,b}</code> alternation — e.g.
         <code>--exclude "**/*.min.js" "**/legacy/**"</code>.
+      </div>
+      <p>
+        With <code>--interactive</code> the conversion is gated behind a terminal wizard before
+        any spend:
+      </p>
+      <pre>◆  restack convert — review the plan
+│
+●  Files to convert (space toggles, enter confirms)
+│  ◻ includes/db.php  → lib/db.ts
+│  ◼ pages/users.php  → app/users/page.tsx
+│  ◼ pages/posts.php  → app/posts/page.tsx
+│
+◇  Keep all 6 route mappings? … yes
+│
+◇  Selected subset — 3 of 4 files · 4 batches
+   Estimated conversion cost: ~$0.38 (heuristic, no cache discounts)
+│
+◆  Start conversion with this subset? … yes</pre>
+      <div class="note">
+        Resume reproduces the subset: the trimmed plan <em>and</em> the selections are persisted,
+        so <code>--resume</code> offers “reuse previous selections” (or re-edit) instead of
+        re-asking from scratch. MCP/agent usage is always non-interactive by design.
       </div>
     </section>
 

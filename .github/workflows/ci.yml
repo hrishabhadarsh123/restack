@@ -72,5 +72,21 @@ jobs:
           echo "plan/convert --json contract OK (keyed runs emit schema-versioned reports/events on stdout)"
           rm -f plan-out.json plan-err.txt conv-out.ndjson conv-err.txt prov-out.txt prov-err.txt
 
+      - name: CLI smoke (--interactive contracts)
+        shell: bash
+        run: |
+          # --interactive must never hang CI: with no TTY it warns on stderr and
+          # falls back to the plain non-interactive flow (same no-key contract).
+          node dist/cli.js convert test/fixtures/php-app --interactive > int-out.txt 2> int-err.txt && rc=$? || rc=$?
+          test "$rc" -eq 1 || { echo "expected exit 1 without API key, got $rc"; exit 1; }
+          test ! -s int-out.txt || { echo "--interactive must not write stdout without a key"; exit 1; }
+          grep -q "not a TTY" int-err.txt || { cat int-err.txt; exit 1; }
+          # --interactive + --json is a hard error (mutually exclusive).
+          node dist/cli.js plan test/fixtures/php-app --interactive --json > int-json.txt 2> int-json-err.txt && rc=$? || rc=$?
+          test "$rc" -eq 1 || { echo "expected exit 1 for --interactive --json, got $rc"; exit 1; }
+          grep -q "mutually exclusive" int-json-err.txt || { cat int-json-err.txt; exit 1; }
+          echo "--interactive contract OK (non-TTY fallback + --json mutual exclusion)"
+          rm -f int-out.txt int-err.txt int-json.txt int-json-err.txt
+
       - name: MCP smoke (stdio JSON-RPC without API key)
         run: node test/mcp-smoke.mjs

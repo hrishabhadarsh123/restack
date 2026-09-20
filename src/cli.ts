@@ -11,6 +11,16 @@ import path from "node:path";
 import { scanProject, buildScanJsonReport } from "./scanner.js";
 import { getProfile } from "./profiles/index.js";
 import { runPlanner, buildPlanJsonReport } from "./planner.js";
+import {
+  isInteractiveTTY,
+  runPrePlanWizard,
+  runPlanReviewWizard,
+  runResumeWizard,
+  applySelections,
+  convertibleSources,
+  type InteractiveOptions,
+} from "./interactive.js";
+import { pickTarget } from "./targets.js";
 import { runConverter } from "./converter-core.js";
 import { buildConversionBatches } from "./converter.js";
 import { runReview } from "./review.js";
@@ -146,15 +156,36 @@ program
   .option("--out <dir>", "where to write .restack/plan.json (defaults to ./converted)")
   .option("--max-cost <usd>", "abort if estimated spend exceeds this", "5")
   .option("--json", "print a machine-readable JSON report on stdout (log output stays on stderr)")
+  .option("--interactive", "review and trim the plan interactively before it is saved (TTY required)")
   .option("--verbose", "debug logging")
-  .action(async (projectRoot: string, opts: CommonOpts & { target?: string; out?: string; json?: boolean }) => {
+  .action(async (projectRoot: string, opts: CommonOpts & { target?: string; out?: string; json?: boolean; interactive?: boolean }) => {
     applyCommon(opts);
+    const interactiveRequested = opts.interactive === true;
+    if (interactiveRequested && opts.json) {
+      logger.error("--interactive and --json are mutually exclusive.");
+      process.exit(1);
+    }
+    const interactive = interactiveRequested && isInteractiveTTY();
+    if (interactiveRequested && !interactive) {
+      logger.warn("stdout is not a TTY — falling back to non-interactive mode.");
+    }
     const sel = selectProvider(opts.provider);
     if (!sel) process.exit(1);
     const model = opts.model ?? DEFAULT_MODELS[sel.id];
     warnModelMismatch(sel, model);
     const scan = await scanProject(projectRoot);
-    const target = resolveTarget(opts.target, scan);
+    let target: ModernTarget;
+    if (interactive && opts.target === undefined) {
+      const pre = await runPrePlanWizard({
+        stack: scan.stack,
+        suggestedTarget: scan.stack === "unknown" ? null : pickTarget(scan.stack),
+        mode: "plan",
+      });
+      if (!pre) return;
+      target = pre.target;
+    } else {
+      target = resolveTarget(opts.target, scan);
+    }
     const outDir = path.resolve(opts.out ?? "converted");
     const maxCost = Number(opts.maxCost ?? 5);
 
@@ -168,8 +199,20 @@ program
     const client = createClient(sel, model);
     try {
       const outcome = await runPlanner(client, scan, { target, model, maxCostUsd: maxCost });
-      await savePlan(outDir, outcome.plan);
-      const plan = outcome.plan;
+      let plan = outcome.plan;
+      let selections: InteractiveOptions | null = null;
+      if (interactive) {
+        selections = await runPlanReviewWizard({
+          scan,
+          plan,
+          pricing: client.pricing,
+          mode: "plan",
+          usdSoFar: outcome.usd,
+        });
+        if (!selections) return; // wizard already printed the cancel message
+        plan = applySelections(plan, selections);
+      }
+      await savePlan(outDir, plan);
       if (opts.json) {
         // Machine-readable mode: report on stdout, logs stay on stderr.
         const report = buildPlanJsonReport(scan, plan, {
@@ -227,8 +270,9 @@ program
   .option("--max-cost <usd>", "hard spend limit in USD", "20")
   .option("--dry-run", "show the plan and exit without converting")
   .option("--json", "stream newline-delimited JSON events to stdout (logs stay on stderr)")
+  .option("--interactive", "review and trim the plan interactively before converting (TTY required)")
   .option("--resume", "resume an interrupted run (reuses .restack/plan.json)")
-  .option("--review", "run a final consistency review pass", false)
+  .option("--review", "run a final consistency review pass")
   .option("--include <glob...>", "only include files matching these globs")
   .option("--exclude <glob...>", "exclude files matching these globs")
   .option("--verbose", "debug logging")
@@ -238,22 +282,50 @@ program
     workers?: string;
     dryRun?: boolean;
     json?: boolean;
+    interactive?: boolean;
     resume?: boolean;
     review?: boolean;
     include?: string[];
     exclude?: string[];
   }) => {
     applyCommon(opts);
+    const interactiveRequested = opts.interactive === true;
+    if (interactiveRequested && opts.json) {
+      logger.error("--interactive and --json are mutually exclusive.");
+      process.exit(1);
+    }
+    const interactive = interactiveRequested && isInteractiveTTY();
+    if (interactiveRequested && !interactive) {
+      logger.warn("stdout is not a TTY — falling back to non-interactive mode.");
+    }
     const sel = selectProvider(opts.provider);
     if (!sel) process.exit(1);
     const model = opts.model ?? DEFAULT_MODELS[sel.id];
     warnModelMismatch(sel, model);
     const outDir = path.resolve(opts.out ?? "converted");
-    const maxCost = Number(opts.maxCost ?? 20);
-    const workers = Math.max(1, Math.min(8, Number(opts.workers ?? 2)));
+    const explicitWorkers = opts.workers !== undefined;
+    const explicitMaxCost = opts.maxCost !== undefined;
+    const explicitReview = opts.review !== undefined;
+    let maxCost = Number(opts.maxCost ?? 20);
+    let workers = Math.max(1, Math.min(8, Number(opts.workers ?? 2)));
+    let review = opts.review === true;
 
     const scan = await scanProject(projectRoot, { includeGlobs: opts.include, excludeGlobs: opts.exclude });
-    const target = resolveTarget(opts.target, scan);
+    let target: ModernTarget;
+    if (interactive) {
+      const pre = await runPrePlanWizard({
+        stack: scan.stack,
+        suggestedTarget: scan.stack === "unknown" ? null : pickTarget(scan.stack),
+        mode: "convert",
+      });
+      if (!pre) return;
+      target = pre.target;
+      if (!explicitWorkers && pre.workers !== undefined) workers = Math.max(1, Math.min(8, pre.workers));
+      if (!explicitMaxCost && pre.maxCostUsd !== undefined) maxCost = pre.maxCostUsd;
+      if (!explicitReview && pre.review !== undefined) review = pre.review;
+    } else {
+      target = resolveTarget(opts.target, scan);
+    }
     const profile = getProfile(target);
 
     logger.info(`${pc.bold("restack convert")} — ${scan.stack} → ${target}`);
@@ -281,15 +353,51 @@ program
     try {
       // ---- Plan (reused when resuming) ---------------------------------------
       let plan: MigrationPlan;
+      let selections: InteractiveOptions | null = null;
       const savedPlan = resuming ? await loadPlan<MigrationPlan>(outDir) : null;
       if (savedPlan) {
         plan = savedPlan;
         logger.info(pc.dim("Reusing saved plan (.restack/plan.json)"));
+        if (interactive) {
+          const done = new Set(
+            Object.entries(existingState!.completedSources)
+              .filter(([, v]) => v.status === "converted" || v.status === "repaired")
+              .map(([k]) => k),
+          );
+          const remaining = convertibleSources(plan).filter((s) => !done.has(s)).length;
+          const choice = await runResumeWizard({ doneCount: done.size, remainingCount: remaining, outDir });
+          if (!choice) return;
+          if (choice === "edit") {
+            selections = await runPlanReviewWizard({
+              scan,
+              plan,
+              pricing: client.pricing,
+              mode: "convert",
+              usdSoFar: existingState!.usd,
+            });
+            if (!selections) return;
+            plan = applySelections(plan, selections);
+            await savePlan(outDir, plan);
+          }
+          // "reuse": the saved plan already IS the selected subset.
+        }
       } else {
         const planned = await runPlanner(client, scan, { target, model, maxCostUsd: maxCost });
         plan = planned.plan;
         await savePlan(outDir, plan);
         logger.success(`Plan ready (${plan.fileMappings.length} mappings) — ${formatCost(planned.usd)}`);
+        if (interactive) {
+          selections = await runPlanReviewWizard({
+            scan,
+            plan,
+            pricing: client.pricing,
+            mode: "convert",
+            usdSoFar: planned.usd,
+          });
+          if (!selections) return;
+          plan = applySelections(plan, selections);
+          await savePlan(outDir, plan);
+        }
       }
 
       // ---- Dry run ------------------------------------------------------------
@@ -330,6 +438,17 @@ program
         usd: 0,
         completedSources: {},
       };
+
+      if (interactive && selections) {
+        // Record the interactive selections so --resume reproduces the same subset.
+        state.interactive = {
+          excludedSources: selections.excludedSources,
+          droppedRoutes: selections.droppedRoutes,
+          workers: explicitWorkers ? undefined : workers,
+          maxCostUsd: explicitMaxCost ? undefined : maxCost,
+          review: explicitReview ? undefined : review,
+        };
+      }
 
       const startTime = Date.now();
       // Resume: skip sources already converted/repaired successfully.
@@ -385,7 +504,7 @@ program
 
       // ---- Optional review ---------------------------------------------------
       let reviewInfo = "";
-      if (opts.review) {
+      if (review) {
         const rev = await runReview(client, plan, outDir, { target, model, maxCostUsd: maxCost });
         reviewInfo = ` · review touched ${rev.filesTouched.length} file(s)`;
       }

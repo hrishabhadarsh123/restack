@@ -6,6 +6,7 @@ import path from "node:path";
 import { promises as fsp } from "node:fs";
 import { createHash } from "node:crypto";
 import type { ModernTarget, FileResult } from "./types.js";
+import type { InteractiveOptions } from "./interactive.js";
 
 export const STATE_DIR_NAME = ".restack";
 export const STATE_FILE_NAME = "state.json";
@@ -29,6 +30,8 @@ export interface RestackState {
   /** Cumulative USD spend recorded across runs. */
   usd: number;
   completedSources: Record<string, CompletedSource>;
+  /** Interactive selections (--interactive) so --resume reproduces the same subset. */
+  interactive?: InteractiveOptions;
 }
 
 export function statePath(outDir: string): string {
