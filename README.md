@@ -139,6 +139,10 @@ the whole pipeline as tools instead of shelling out to the CLI:
 restack mcp          # stdio transport (the standard for local agent tools)
 ```
 
+> 📖 Step-by-step connection guides for **Google Antigravity** and **Hermes Agent**
+> (config files, secrets, safety tips, troubleshooting):
+> [Agent Setup on the docs site](https://hrishabhadarsh123.github.io/restack/agent-setup).
+
 | Tool | What it does |
 |---|---|
 | `restack_scan` | stack detection + file inventory + token estimate (no API key needed) |

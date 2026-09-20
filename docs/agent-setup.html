@@ -1,0 +1,228 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Agent Setup — restack docs</title>
+  <meta name="description" content="Connect restack's MCP server to Google Antigravity, Hermes Agent, Claude Code or Cursor and drive legacy→modern migrations conversationally." />
+  <link rel="stylesheet" href="./styles.css" />
+</head>
+<body>
+  <nav>
+    <div class="container">
+      <a class="brand" href="./index.html">re<span>stack</span></a>
+      <a class="link" href="./index.html">Overview</a>
+      <a class="link" href="./architecture.html">Architecture</a>
+      <a class="link" href="./cli-reference.html">CLI Reference</a>
+      <a class="link" href="./walkthrough.html">Walkthrough</a>
+      <a class="link" href="./agent-setup.html">Agent Setup</a>
+      <span class="spacer"></span>
+      <a class="link" href="https://github.com/hrishabhadarsh123/restack">GitHub</a>
+    </div>
+  </nav>
+
+  <header class="hero">
+    <div class="container">
+      <h1>Use restack inside AI agents</h1>
+      <p class="tagline">
+        restack ships a built-in <a href="https://modelcontextprotocol.io">Model Context Protocol</a>
+        (MCP) server: <code>restack mcp</code>. Point <strong>Google Antigravity</strong>,
+        <strong>Hermes Agent</strong>, Claude Code, Cursor or Windsurf at it and drive a full
+        legacy→modern migration conversationally — no shell required.
+      </p>
+    </div>
+  </header>
+
+  <main class="container">
+    <section>
+      <h2>What the agent gets</h2>
+      <table>
+        <tr><th>Tool</th><th>What it does</th><th>API key</th></tr>
+        <tr><td><code>restack_scan</code></td><td>Stack detection, file inventory, token &amp; cost estimate</td><td>not needed</td></tr>
+        <tr><td><code>restack_plan</code></td><td>Structured migration plan (dry run) — mappings, routes, waves, risks</td><td>needed</td></tr>
+        <tr><td><code>restack_convert</code></td><td>Full conversion with verify/repair, checkpoint &amp; resume</td><td>needed</td></tr>
+        <tr><td><code>restack_status</code></td><td>Inspect a previous run: per-file statuses, spend, what would resume</td><td>not needed</td></tr>
+      </table>
+      <p>
+        Every tool result carries an agent-facing summary <em>plus</em> a machine-readable
+        <code>_restack</code> JSON block, so the agent can chain
+        <code>scan → plan → convert → status</code> and react to real data (cost, waves, failures)
+        instead of parsing prose.
+      </p>
+    </section>
+
+    <section>
+      <h2>Prerequisites (both platforms)</h2>
+      <ol>
+        <li><strong>Node ≥ 20</strong> — check with <code>node -v</code>.</li>
+        <li><strong>restack on PATH</strong> (recommended): <pre>npm install -g restack-ai</pre>
+          The <code>npx -y restack-ai</code> form also works everywhere, but the first run
+          downloads the package and is slower.</li>
+        <li><strong>One provider key</strong> for <code>plan</code>/<code>convert</code>:
+          <code>ANTHROPIC_API_KEY</code>, <code>OPENAI_API_KEY</code>/<code>OPENROUTER_API_KEY</code>
+          or <code>GEMINI_API_KEY</code> (see <a href="./cli-reference.html">CLI Reference → Providers</a>).</li>
+        <li><strong>Sanity check</strong> in a normal terminal first:
+          <pre>restack scan ./legacy-app   # should print the stack summary
+restack mcp                 # starts and waits silently — that is correct</pre>
+          <code>restack mcp</code> is a stdio <em>server</em>, not a REPL: it speaks JSON-RPC on
+          stdin/stdout and logs to stderr. Silence is success — kill it with <code>Ctrl+C</code>.</li>
+      </ol>
+    </section>
+
+    <section>
+      <h2>Google Antigravity</h2>
+      <p>Antigravity 2.0, the Antigravity IDE and the Antigravity CLI all read the same
+      <code>mcpServers</code> JSON shape (see the
+      <a href="https://antigravity.google/docs/mcp/">official MCP docs</a>).</p>
+      <ol>
+        <li><strong>Open the MCP config editor.</strong>
+          <ul>
+            <li><em>Antigravity 2.0:</em> Settings (bottom-left) → <strong>Customizations</strong> →
+              <strong>Installed MCP Servers</strong> → <strong>Add MCP</strong> (this opens the MCP
+              Store — restack is not in the store, so continue below) → close the store and open
+              <strong>View raw config</strong>.</li>
+            <li><em>Antigravity IDE:</em> <code>…</code> at the top of the agent side panel →
+              <strong>MCP Servers</strong> → <strong>Manage MCP Servers</strong> →
+              <strong>View raw config</strong>.</li>
+            <li><em>Antigravity CLI:</em> type <code>/mcp</code> in the prompt panel for the
+              interactive manager, or just edit the file directly.</li>
+          </ul>
+          The file lives globally at <code>~/.gemini/config/mcp_config.json</code>, or
+          per-workspace at <code>.agents/mcp_config.json</code> in your project.</li>
+        <li><strong>Add the restack server</strong> (merge into the existing
+          <code>mcpServers</code> object):
+          <pre>{
+  "mcpServers": {
+    "restack": {
+      "command": "restack",
+      "args": ["mcp"],
+      "env": {
+        "ANTHROPIC_API_KEY": "sk-ant-..."
+      }
+    }
+  }
+}</pre>
+          <div class="note">
+            <strong>Windows / no global install?</strong> Use the npx form, which needs no PATH
+            setup: <code>"command": "npx"</code>, <code>"args": ["-y", "restack-ai", "mcp"]</code>.
+          </div></li>
+        <li><strong>Save and refresh</strong> the server list (the refresh button in
+          Customizations, or the agent panel's MCP Servers view). A green/active status ring
+          means the handshake succeeded.</li>
+        <li><strong>Verify</strong> — in the agent panel ask:
+          <em>“Use restack_scan on ./legacy-app and tell me the stack, confidence and estimated
+          conversion cost.”</em> The agent should call the tool and quote real numbers.</li>
+      </ol>
+      <div class="note">
+        <strong>Cost tip:</strong> <code>restack_convert</code> spends real money. Antigravity
+        supports <code>"disabledTools": ["restack_convert"]</code> on the server entry — the agent
+        can still scan and plan, while conversions stay behind an explicit request you re-enable
+        when ready.
+      </div>
+    </section>
+
+    <section>
+      <h2>Hermes Agent</h2>
+      <p>Hermes uses a YAML config with a <code>mcp_servers:</code> mapping (see the
+      <a href="https://hermes-agent.nousresearch.com/docs/reference/mcp-config-reference">MCP config
+      reference</a>). You can also add servers through the desktop Profile Builder dashboard.</p>
+      <ol>
+        <li><strong>Install restack</strong> — <code>npm install -g restack-ai</code> (Node ≥ 20).</li>
+        <li><strong>Edit your Hermes config</strong> (typically <code>~/.hermes/config.yaml</code>)
+          and add the server:
+          <pre>mcp_servers:
+  restack:
+    command: "npx"
+    args: ["-y", "restack-ai", "mcp"]
+    env:
+      ANTHROPIC_API_KEY: "${env:ANTHROPIC_API_KEY}"
+    timeout: 900          # restack_convert runs long — default is 300s per call
+    connect_timeout: 60</pre>
+          <div class="note">
+            <strong>Secrets:</strong> Hermes interpolates <code>${ENV_VAR}</code> (and the
+            Cursor-style <code>${env:ENV_VAR}</code>) from the process environment or
+            <code>~/.hermes/.env</code> — so you never paste the key into the config itself.
+            You can also hardcode the key, but the reference form is safer.
+          </div></li>
+        <li><strong>Restart Hermes</strong> (or reconnect MCP servers) and check the MCP status
+          surface: <code>restack</code> should appear with 4 registered tools.</li>
+        <li><strong>Verify</strong> — ask:
+          <em>“Run restack_scan on ./legacy-app and show me the detected stack and token
+          estimate.”</em></li>
+      </ol>
+      <div class="note">
+        <strong>Safety tip:</strong> Hermes supports <code>trust: untrusted</code> per server —
+        every write-capable tool call then requires your approval before it runs. Our tools do not
+        declare read-only hints, so under <code>untrusted</code> <em>all</em> restack calls ask
+        first (safest); if that is too noisy, keep the default and gate
+        <code>restack_convert</code> with a <code>tools:</code> filter until you need it:
+        <pre>    tools:
+      include: [restack_scan, restack_plan, restack_status]</pre>
+      </div>
+    </section>
+
+    <section>
+      <h2>Driving the pipeline from the agent</h2>
+      <p>The recommended conversation pattern keeps the expensive step behind a checkpoint:</p>
+      <ol>
+        <li><em>“restack_scan ./legacy-app — what stack is this and what will it cost?”</em></li>
+        <li><em>“restack_plan ./legacy-app with target nextjs. Show me the summary, decisions and
+          risks.”</em> — read the plan; adjust with <code>--target</code>/globs if needed.</li>
+        <li><em>“The plan looks good — restack_convert with maxCostUsd 10 and outDir
+          ./converted.”</em> — the cost guard aborts before a call that would exceed the budget.</li>
+        <li>Interrupted? Resume by asking again with <code>resume: true</code> — already-converted
+          sources are skipped, or check progress any time with <em>“restack_status for
+          ./converted.”</em></li>
+      </ol>
+    </section>
+
+    <section>
+      <h2>Troubleshooting</h2>
+      <table>
+        <tr><th>Symptom</th><th>Fix</th></tr>
+        <tr>
+          <td>Server not listed / 0 tools</td>
+          <td>Check <code>node -v</code> ≥ 20; the very first <code>npx</code> run needs network
+          access. Restart the host so it re-launches the server.</td>
+        </tr>
+        <tr>
+          <td><code>No model provider key found</code></td>
+          <td>The key env var is not reaching the server process — set it in the config's
+          <code>env</code> block (Antigravity) or <code>~/.hermes/.env</code> (Hermes).</td>
+        </tr>
+        <tr>
+          <td>Tool call times out during <code>restack_convert</code></td>
+          <td>Conversions are long. Raise the tool timeout (Hermes: <code>timeout: 900+</code>)
+          or run the conversion from the CLI with <code>--json</code> and let the agent poll
+          <code>restack_status</code> instead.</td>
+        </tr>
+        <tr>
+          <td>Windows: server fails to start with <code>"command": "restack"</code></td>
+          <td>Use the npx form: <code>"command": "npx"</code>,
+          <code>"args": ["-y", "restack-ai", "mcp"]</code>.</td>
+        </tr>
+        <tr>
+          <td>Where did the output go?</td>
+          <td>The converted project is in <code>&lt;outDir&gt;</code> (default
+          <code>./converted</code>); state and plan live under
+          <code>&lt;outDir&gt;/.restack/</code>. Ask the agent for
+          <code>restack_status</code> any time.</td>
+        </tr>
+      </table>
+      <div class="note">
+        Other MCP hosts (Claude Code, Cursor, Windsurf, ...) use the same
+        <code>mcpServers</code> JSON shape as Antigravity — see the
+        <a href="https://github.com/hrishabhadarsh123/restack#use-inside-ai-agents-mcp">README
+        example</a> and the <a href="./cli-reference.html">CLI Reference → restack mcp</a> for the
+        full tool/argument tables.
+      </div>
+    </section>
+  </main>
+
+  <footer>
+    <div class="container">
+      <p>restack — legacy code in, modern stack out. <a href="https://github.com/hrishabhadarsh123/restack">GitHub</a> · <a href="https://www.npmjs.com/package/restack-ai">npm</a></p>
+    </div>
+  </footer>
+</body>
+</html>
