@@ -51,3 +51,16 @@ jobs:
             console.log('scan --json OK:', r.stack, r.fileCount + ' files,', r.totalTokens, 'tokens');
           "
           rm -f scan-smoke.json
+
+      - name: CLI smoke (plan/convert --json contract without API key)
+        shell: bash
+        run: |
+          node dist/cli.js plan test/fixtures/php-app --json > plan-out.json 2> plan-err.txt && rc=$? || rc=$?
+          test "$rc" -eq 1 || { echo "expected exit 1 without API key, got $rc"; exit 1; }
+          test ! -s plan-out.json || { echo "plan --json must not write stdout without a key"; exit 1; }
+          grep -q "ANTHROPIC_API_KEY" plan-err.txt || { cat plan-err.txt; exit 1; }
+          node dist/cli.js convert test/fixtures/php-app --json > conv-out.ndjson 2> conv-err.txt && rc=$? || rc=$?
+          test "$rc" -eq 1 || { echo "expected exit 1 without API key, got $rc"; exit 1; }
+          test ! -s conv-out.ndjson || { echo "convert --json must not write stdout without a key"; exit 1; }
+          echo "plan/convert --json contract OK (keyed runs emit schema-versioned reports/events on stdout)"
+          rm -f plan-out.json plan-err.txt conv-out.ndjson conv-err.txt

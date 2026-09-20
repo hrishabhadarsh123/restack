@@ -6,7 +6,7 @@ import path from "node:path";
 import { promises as fsp } from "node:fs";
 import type { AnthropicClient } from "./anthropic.js";
 import { getProfile } from "./profiles/index.js";
-import type { FileResult, GeneratedFile, MigrationPlan, ModernTarget, ScanResult } from "./types.js";
+import type { ConvertStats, FileResult, GeneratedFile, MigrationPlan, ModernTarget, ScanResult } from "./types.js";
 import { logger } from "./util/logger.js";
 import { estimateTokens } from "./util/tokens.js";
 import { CostLimitError } from "./state.js";
@@ -26,6 +26,10 @@ export interface ConvertOptions {
   maxCostUsd?: number;
   maxRepairRounds?: number;
   onBatchComplete?: (results: FileResult[]) => void;
+  /** Fired when processing reaches a new wave (convert --json event stream). */
+  onWave?: (index: number) => void;
+  /** Fired immediately before a batch is picked up. */
+  onBatchStart?: (batch: string[]) => void;
   /** Resume support: sources already converted successfully (skipped). */
   skipSources?: Set<string>;
   /** Test hook: override profile verification. */
@@ -201,6 +205,17 @@ export async function runConverter(
   // ---- Bounded-concurrency batch processor ---------------------------------
   const queue = [...batches];
 
+  // Wave index per batch (first wave containing the batch's first source).
+  const waveIndexFor = (batch: string[]): number => {
+    const first = batch[0];
+    if (!first) return 0;
+    for (let i = 0; i < plan.conversionOrder.length; i++) {
+      if (plan.conversionOrder[i]!.includes(first)) return i;
+    }
+    return plan.conversionOrder.length;
+  };
+  let lastWave = -1;
+
   async function worker(): Promise<void> {
     // eslint-disable-next-line no-constant-condition
     while (true) {
@@ -209,6 +224,12 @@ export async function runConverter(
       }
       const batch = queue.shift();
       if (!batch) break;
+      const waveIdx = waveIndexFor(batch);
+      if (waveIdx !== lastWave) {
+        lastWave = waveIdx;
+        opts.onWave?.(waveIdx);
+      }
+      opts.onBatchStart?.(batch);
       let batchResults: FileResult[];
       try {
         batchResults = await convertBatch(batch);
@@ -240,13 +261,15 @@ export async function runConverter(
   }
 
   // ---- Stats ------------------------------------------------------------------
-  const stats = {
+  const stats: ConvertStats = {
     filesConverted: results.filter((r) => r.status === "converted").length,
     filesRepaired: results.filter((r) => r.status === "repaired").length,
     filesFailed: results.filter((r) => r.status === "failed").length,
     filesDropped: plan.droppedFiles.length,
     calls: batchStats.calls,
     usd: client.usd,
+    inputTokens: client.inputTokens,
+    outputTokens: client.outputTokens,
     durationMs: Date.now() - startedAt,
   };
   return { results, scaffoldWritten, stats };

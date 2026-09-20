@@ -5,7 +5,14 @@
 import type { AnthropicClient } from "./anthropic.js";
 import { packContext } from "./packer.js";
 import { getProfile } from "./profiles/index.js";
-import { MigrationPlanSchema, type MigrationPlan, type ModernTarget, type ScanResult } from "./types.js";
+import {
+  MigrationPlanSchema,
+  REPORT_SCHEMA_VERSION,
+  type MigrationPlan,
+  type ModernTarget,
+  type PlanJsonReport,
+  type ScanResult,
+} from "./types.js";
 import { logger } from "./util/logger.js";
 import { formatTokens } from "./util/format.js";
 import { estimateTokens } from "./util/tokens.js";
@@ -87,6 +94,34 @@ export async function runPlanner(
 
   const plan = parsePlan(res.text, opts.target);
   return { plan, packed, calls: 1, usd: res.costUsd };
+}
+
+/**
+ * Machine-readable form of a planning run (emitted by `restack plan --json`).
+ * Pure function so it can be unit-tested without running the CLI.
+ */
+export function buildPlanJsonReport(
+  scan: ScanResult,
+  plan: MigrationPlan,
+  meta: { planHash?: string; usd?: number; calls?: number },
+): PlanJsonReport {
+  return {
+    schema: REPORT_SCHEMA_VERSION,
+    root: scan.root,
+    target: plan.target,
+    stack: scan.stack,
+    planHash: meta.planHash,
+    summary: plan.summary,
+    decisions: plan.decisions,
+    dependencies: plan.dependencies,
+    fileMappings: plan.fileMappings,
+    routeMappings: plan.routeMappings,
+    droppedFiles: plan.droppedFiles,
+    waves: plan.conversionOrder,
+    risks: plan.risks,
+    estimatedCostUsd: meta.usd,
+    calls: meta.calls,
+  };
 }
 
 /** Parse + validate the plan JSON, tolerating markdown fences and stray text. */

@@ -1,5 +1,6 @@
 import { describe, expect, it } from "vitest";
-import { parsePlan } from "../src/planner.js";
+import { parsePlan, buildPlanJsonReport } from "../src/planner.js";
+import type { ScanResult } from "../src/types.js";
 
 const validPlan = {
   target: "nextjs",
@@ -46,5 +47,48 @@ describe("parsePlan", () => {
     const wrong = { ...validPlan, target: "fastapi" };
     const plan = parsePlan(JSON.stringify(wrong), "nextjs");
     expect(plan.target).toBe("nextjs");
+  });
+});
+
+describe("buildPlanJsonReport", () => {
+  const fakeScan = {
+    root: "/tmp/legacy",
+    stack: "php-jquery",
+    confidence: 0.8,
+    evidence: [],
+    files: [],
+    totalTokens: 10,
+    libraries: [],
+    excludedSensitive: [],
+    oversizedFiles: [],
+  } as unknown as ScanResult;
+
+  it("builds a schema-versioned, JSON-round-trippable report", () => {
+    const plan = parsePlan(JSON.stringify(validPlan), "nextjs");
+    const report = buildPlanJsonReport(fakeScan, plan, {
+      planHash: "abc123",
+      usd: 0.05,
+      calls: 1,
+    });
+
+    expect(report.schema).toBe(1);
+    expect(report.target).toBe("nextjs");
+    expect(report.stack).toBe("php-jquery");
+    expect(report.planHash).toBe("abc123");
+    expect(report.estimatedCostUsd).toBe(0.05);
+    expect(report.calls).toBe(1);
+    expect(report.waves).toEqual(["index.php"].map((s) => [s]));
+    expect(report.fileMappings).toHaveLength(1);
+    expect(report.summary).toBe("Convert a tiny PHP shop");
+
+    // Round-trips through NDJSON/HTTP unchanged
+    expect(JSON.parse(JSON.stringify(report))).toEqual(report);
+  });
+
+  it("keeps meta fields optional", () => {
+    const plan = parsePlan(JSON.stringify(validPlan), "nextjs");
+    const report = buildPlanJsonReport(fakeScan, plan, {});
+    expect(report.planHash).toBeUndefined();
+    expect(report.estimatedCostUsd).toBeUndefined();
   });
 });

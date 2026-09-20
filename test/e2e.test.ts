@@ -153,6 +153,66 @@ describe("e2e django conversion (mocked Claude)", () => {
   });
 });
 
+describe("convert --json event stream (mocked Claude)", () => {
+  let outDir: string;
+
+  beforeEach(async () => {
+    outDir = await fsp.mkdtemp(path.join(os.tmpdir(), "restack-e2e-events-"));
+  });
+
+  it("emits ordered schema-versioned events mirroring the CLI wiring", async () => {
+    const scan = await scanProject(PHP_APP);
+    const plan = fakePlan(scan);
+    const client = new MockClient(goodResponses());
+
+    // Mirrors src/cli.ts: hook-driven NDJSON events on stdout.
+    const events: Array<Record<string, unknown>> = [];
+    const emit = (e: Record<string, unknown>): void => void events.push(e);
+
+    const outcome = await runConverter(client, scan, plan, outDir, {
+      target: "nextjs",
+      model: "mock",
+      workers: 1,
+      verifyOverride: async () => ({ ok: true, errors: [] }),
+      onWave: (index) => emit({ schema: 1, event: "wave", index }),
+      onBatchStart: (batch) => emit({ schema: 1, event: "batch_start", sources: batch }),
+      onBatchComplete: (results) =>
+        emit({
+          schema: 1,
+          event: "batch_complete",
+          sources: results.map((r) => r.source),
+          statuses: Object.fromEntries(results.map((r) => [r.source, r.status])),
+        }),
+    });
+    for (const r of outcome.results) {
+      emit({ schema: 1, event: "file", source: r.source, status: r.status, outputs: r.outputs.map((o) => o.path) });
+    }
+    emit({ schema: 1, event: "summary", stats: { filesConverted: outcome.stats.filesConverted } });
+
+    const kinds = events.map((e) => e.event);
+    expect(kinds[0]).toBe("wave"); // wave announced before any batch
+    expect(kinds.indexOf("batch_start")!).toBeGreaterThan(kinds.indexOf("wave")!);
+    expect(kinds.filter((k) => k === "batch_start")).toHaveLength(2);
+    expect(kinds.filter((k) => k === "batch_complete")).toHaveLength(2);
+    expect(kinds[kinds.length - 1]).toBe("summary");
+
+    // Waves in order, one per conversion wave
+    const waveIdx = events.filter((e) => e.event === "wave").map((e) => e.index);
+    expect(waveIdx).toEqual([0, 1]);
+
+    // Every event is schema-tagged and independently JSON-serializable (NDJSON line)
+    expect(events.every((e) => e.schema === 1)).toBe(true);
+    for (const e of events) expect(JSON.parse(JSON.stringify(e))).toEqual(e);
+
+    const summary = events.find((e) => e.event === "summary");
+    expect(summary!.stats).toMatchObject({ filesConverted: 3 });
+
+    // batch_complete statuses map sources to outcomes
+    const complete = events.filter((e) => e.event === "batch_complete");
+    expect(complete[0]!.statuses).toMatchObject({ "includes/db.php": "converted" });
+  });
+});
+
 describe("e2e conversion (mocked Claude)", () => {
   let outDir: string;
 

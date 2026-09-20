@@ -77,6 +77,11 @@ cleanly into `jq` or CI checks (file contents are never included):
 restack scan ./legacy-app --json | jq '{stack, confidence, totalTokens}'
 ```
 
+`plan --json` emits a schema-versioned report (stack, target, plan hash, file mappings, waves,
+risks, cost) on stdout; `convert --json` streams newline-delimited JSON events (`run`, `wave`,
+`batch_start`, `batch_complete`, `file`, `summary`) so scripts can follow a conversion live. Same
+stream discipline everywhere: JSON on stdout, human logs on stderr.
+
 ### `restack plan <root> [--target t]`
 
 Packs as many files as fit into one Claude call — entry/config/routes/shared first, oversized

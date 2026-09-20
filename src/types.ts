@@ -141,3 +141,68 @@ export interface ConvertStats {
   usd: number;
   durationMs: number;
 }
+
+// ---------------------------------------------------------------------------
+// Machine-readable reports (plan/convert --json)
+// ---------------------------------------------------------------------------
+
+/** Bump when a --json payload changes in a breaking way. */
+export const REPORT_SCHEMA_VERSION = 1;
+
+export interface PlanJsonReport {
+  schema: number;
+  root: string;
+  target: ModernTarget;
+  stack: LegacyStack;
+  /** Short hash tying the report to a .restack/plan.json + state. */
+  planHash?: string;
+  summary: string;
+  decisions: Array<{ topic: string; choice: string }>;
+  dependencies: string[];
+  fileMappings: Array<{ source: string; targets: string[]; note: string }>;
+  routeMappings: Array<{ from: string; to: string; method?: string }>;
+  droppedFiles: Array<{ path: string; reason: string }>;
+  /** conversionOrder as saved in the plan (dependency waves). */
+  waves: string[][];
+  risks: string[];
+  estimatedCostUsd?: number;
+  calls?: number;
+}
+
+export interface ConvertSummary {
+  filesConverted: number;
+  filesRepaired: number;
+  filesFailed: number;
+  filesDropped: number;
+  calls: number;
+  usd: number;
+  durationMs: number;
+}
+
+/**
+ * Newline-delimited JSON events streamed to stdout by `convert --json`.
+ * Human logs stay on stderr; each line is self-describing (schema + event).
+ */
+export type ConvertEvent =
+  | { schema: number; event: "run"; target: ModernTarget; outDir: string; batches: number; waves: number }
+  | { schema: number; event: "wave"; index: number }
+  | { schema: number; event: "batch_start"; sources: string[] }
+  | {
+      schema: number;
+      event: "batch_complete";
+      sources: string[];
+      statuses: Record<string, FileResult["status"]>;
+      calls: number;
+      usd: number;
+    }
+  | {
+      schema: number;
+      event: "file";
+      source: string;
+      status: FileResult["status"];
+      outputs: string[];
+      attempts: number;
+      error?: string;
+    }
+  | { schema: number; event: "warning"; message: string }
+  | { schema: number; event: "summary"; stats: ConvertSummary };

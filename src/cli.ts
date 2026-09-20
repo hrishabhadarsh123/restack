@@ -8,8 +8,9 @@ import pc from "picocolors";
 import path from "node:path";
 import { scanProject, buildScanJsonReport } from "./scanner.js";
 import { getProfile } from "./profiles/index.js";
-import { runPlanner } from "./planner.js";
+import { runPlanner, buildPlanJsonReport } from "./planner.js";
 import { runConverter } from "./converter-core.js";
+import { buildConversionBatches } from "./converter.js";
 import { runReview } from "./review.js";
 import { AnthropicClient } from "./anthropic.js";
 import {
@@ -20,7 +21,13 @@ import {
   computePlanHash,
   CostLimitError,
 } from "./state.js";
-import type { MigrationPlan, ModernTarget, ScanResult } from "./types.js";
+import {
+  REPORT_SCHEMA_VERSION,
+  type ConvertEvent,
+  type MigrationPlan,
+  type ModernTarget,
+  type ScanResult,
+} from "./types.js";
 import { logger } from "./util/logger.js";
 import { formatCount, formatCost, formatDuration, formatPercent, formatTokens, printTable } from "./util/format.js";
 
@@ -138,8 +145,9 @@ program
   .option("--model <model>", "Claude model id", "claude-sonnet-4-5")
   .option("--out <dir>", "where to write .restack/plan.json (defaults to ./converted)")
   .option("--max-cost <usd>", "abort if estimated spend exceeds this", "5")
+  .option("--json", "print a machine-readable JSON report on stdout (log output stays on stderr)")
   .option("--verbose", "debug logging")
-  .action(async (projectRoot: string, opts: CommonOpts & { target?: string; out?: string }) => {
+  .action(async (projectRoot: string, opts: CommonOpts & { target?: string; out?: string; json?: boolean }) => {
     applyCommon(opts);
     const apiKey = requireApiKey();
     const scan = await scanProject(projectRoot);
@@ -155,6 +163,20 @@ program
       const outcome = await runPlanner(client, scan, { target, model: opts.model ?? "claude-sonnet-4-5", maxCostUsd: maxCost });
       await savePlan(outDir, outcome.plan);
       const plan = outcome.plan;
+      if (opts.json) {
+        // Machine-readable mode: report on stdout, logs stay on stderr.
+        const report = buildPlanJsonReport(scan, plan, {
+          planHash: computePlanHash(plan, {
+            root: scan.root,
+            stack: scan.stack,
+            files: scan.files.map((f) => ({ rel: f.rel, size: f.size })),
+          }),
+          usd: outcome.usd,
+          calls: outcome.calls,
+        });
+        process.stdout.write(JSON.stringify(report, null, 2) + "\n");
+        return;
+      }
       logger.info("");
       logger.success(`Plan saved → ${path.join(outDir, ".restack", "plan.json")}`);
       logger.info("");
@@ -196,6 +218,7 @@ program
   .option("--workers <n>", "parallel conversion batches", "2")
   .option("--max-cost <usd>", "hard spend limit in USD", "20")
   .option("--dry-run", "show the plan and exit without converting")
+  .option("--json", "stream newline-delimited JSON events to stdout (logs stay on stderr)")
   .option("--resume", "resume an interrupted run (reuses .restack/plan.json)")
   .option("--review", "run a final consistency review pass", false)
   .option("--include <glob...>", "only include files matching these globs")
@@ -206,6 +229,7 @@ program
     out?: string;
     workers?: string;
     dryRun?: boolean;
+    json?: boolean;
     resume?: boolean;
     review?: boolean;
     include?: string[];
@@ -231,6 +255,13 @@ program
     const apiKey = requireApiKey();
     const client = new AnthropicClient(apiKey, model);
     const existingState = await loadState(outDir);
+
+    // JSON event stream: the run event carries the resolved wave/batch shape
+    // (planned here, re-planned below) once the conversion batches are known.
+    const emit = (event: ConvertEvent): void => {
+      if (!opts.json) return;
+      process.stdout.write(JSON.stringify(event) + "\n");
+    };
     const resuming = opts.resume === true && existingState != null;
 
     try {
@@ -296,12 +327,23 @@ program
       if (resuming && skipSources.size > 0) {
         logger.info(pc.dim(`Resuming: ${skipSources.size} file(s) already converted — skipping them`));
       }
+      const batches = buildConversionBatches(scan, plan, skipSources);
+      emit({
+        schema: REPORT_SCHEMA_VERSION,
+        event: "run",
+        target,
+        outDir,
+        batches: batches.length,
+        waves: plan.conversionOrder.length,
+      });
       const outcome = await runConverter(client, scan, plan, outDir, {
         target,
         model,
         workers,
         maxCostUsd: maxCost,
         skipSources,
+        onWave: (index) => emit({ schema: REPORT_SCHEMA_VERSION, event: "wave", index }),
+        onBatchStart: (batch) => emit({ schema: REPORT_SCHEMA_VERSION, event: "batch_start", sources: batch }),
         onBatchComplete: (results) => {
           for (const r of results) {
             const mark = r.status === "failed" ? pc.red("✗") : r.status === "repaired" ? pc.yellow("🔧") : pc.green("✓");
@@ -313,6 +355,14 @@ program
               error: r.error,
             };
           }
+          emit({
+            schema: REPORT_SCHEMA_VERSION,
+            event: "batch_complete",
+            sources: results.map((r) => r.source),
+            statuses: Object.fromEntries(results.map((r) => [r.source, r.status])),
+            calls: client.calls,
+            usd: client.usd,
+          });
           state.usd = client.usd;
           // Persist progress incrementally so an interrupted run can --resume.
           void saveState(outDir, state).catch(() => {});
@@ -337,6 +387,32 @@ program
       }
       state.usd = client.usd;
       await saveState(outDir, state);
+
+      // ---- JSON event stream ------------------------------------------------------
+      for (const r of outcome.results) {
+        emit({
+          schema: REPORT_SCHEMA_VERSION,
+          event: "file",
+          source: r.source,
+          status: r.status,
+          outputs: r.outputs.map((o) => o.path),
+          attempts: r.attempts,
+          error: r.error,
+        });
+      }
+      emit({
+        schema: REPORT_SCHEMA_VERSION,
+        event: "summary",
+        stats: {
+          filesConverted: outcome.stats.filesConverted,
+          filesRepaired: outcome.stats.filesRepaired,
+          filesFailed: outcome.stats.filesFailed,
+          filesDropped: outcome.stats.filesDropped,
+          calls: outcome.stats.calls,
+          usd: outcome.stats.usd,
+          durationMs: outcome.stats.durationMs,
+        },
+      });
 
       // ---- Report ----------------------------------------------------------------
       const dur = Date.now() - startTime;

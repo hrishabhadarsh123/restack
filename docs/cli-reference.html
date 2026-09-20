@@ -79,8 +79,10 @@
         <tr><td><code>--model &lt;id&gt;</code></td><td>Claude model id</td><td><code>claude-sonnet-4-5</code></td></tr>
         <tr><td><code>--out &lt;dir&gt;</code></td><td>Where to write <code>.restack/plan.json</code></td><td><code>./converted</code></td></tr>
         <tr><td><code>--max-cost &lt;usd&gt;</code></td><td>Abort if the estimated spend would exceed this</td><td><code>5</code></td></tr>
+        <tr><td><code>--json</code></td><td>Machine-readable JSON report on stdout (logs stay on stderr) — stack, target, plan hash, mappings, waves, risks, cost</td><td>off</td></tr>
         <tr><td><code>--verbose</code></td><td>Debug logging</td><td>off</td></tr>
       </table>
+      <pre>restack plan ./legacy-app --json | jq '{stack, target, planHash, waves: (.waves | length)}'</pre>
     </section>
 
     <section>
@@ -95,6 +97,7 @@
         <tr><td><code>--workers &lt;n&gt;</code></td><td>Parallel conversion batches (clamped to 1–8)</td><td><code>2</code></td></tr>
         <tr><td><code>--max-cost &lt;usd&gt;</code></td><td>Hard spend limit; aborts before a call that would exceed it</td><td><code>20</code></td></tr>
         <tr><td><code>--dry-run</code></td><td>Show the plan (summary, waves, decisions) and exit without converting</td><td>off</td></tr>
+        <tr><td><code>--json</code></td><td>Stream newline-delimited JSON events (<code>run</code>, <code>wave</code>, <code>batch_start</code>, <code>batch_complete</code>, <code>file</code>, <code>warning</code>, <code>summary</code>) on stdout, each tagged with <code>schema</code>; logs stay on stderr. Mutually exclusive with <code>--interactive</code> when it ships.</td><td>off</td></tr>
         <tr><td><code>--resume</code></td><td>Reuse the saved plan and skip sources already converted in <code>.restack/state.json</code></td><td>off</td></tr>
         <tr><td><code>--review</code></td><td>Run a final cross-file consistency review pass</td><td>off</td></tr>
         <tr><td><code>--include &lt;glob...&gt;</code></td><td>Only include files matching these globs</td><td>all source files</td></tr>
