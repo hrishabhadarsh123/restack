@@ -177,6 +177,37 @@
         <code>--json</code>), so agents can chain <code>scan → plan → convert → status</code> and
         react to real data. Human logs stay on stderr; the MCP stdio transport owns stdout.
       </p>
+      <table>
+        <tr><th>Prompt</th><th>Arguments</th><th>Notes</th></tr>
+        <tr>
+          <td><code>migration_walkthrough</code></td>
+          <td>optional <code>stack</code> (<code>php-jquery</code>/<code>python2</code>/<code>django</code>/omitted), optional <code>target</code></td>
+          <td>Step-by-step playbook: scan → plan → review → convert → status/resume + guardrails (budget, resume)</td>
+        </tr>
+        <tr>
+          <td><code>resume_migration</code></td>
+          <td>optional <code>outDir</code></td>
+          <td>Reads <code>.restack/state.json</code> and returns resume guidance; fresh-start guidance when there is no state</td>
+        </tr>
+      </table>
+      <table>
+        <tr><th>Resource</th><th>URI</th><th>Notes</th></tr>
+        <tr>
+          <td>Stack conversion notes</td>
+          <td><code>restack://stacks/{stack}</code></td>
+          <td>Same guidance the converter injects; lists <code>php-jquery</code>, <code>python2</code>, <code>django</code></td>
+        </tr>
+        <tr>
+          <td>CLI reference</td>
+          <td><code>restack://docs/cli.md</code></td>
+          <td>Compact command/flag reference for agents</td>
+        </tr>
+        <tr>
+          <td>Run state</td>
+          <td><code>restack://state.json</code></td>
+          <td>Latest run state from <code>./converted/.restack/state.json</code>; explanatory text before the first run</td>
+        </tr>
+      </table>
       <pre>{
   "mcpServers": {
     "restack": {

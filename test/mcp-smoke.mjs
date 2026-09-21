@@ -7,6 +7,8 @@
  *   2. tools/list → all four pipeline tools
  *   3. tools/call restack_scan → summary text + parseable _restack JSON
  *   4. tools/call restack_plan without any key → actionable error, no crash
+ *   5. prompts/list + prompts/get → guidance templates render per-stack
+ *   6. resources/list + resources/read → stack notes, CLI reference, state
  */
 import { spawn } from "node:child_process";
 import path from "node:path";
@@ -124,7 +126,38 @@ try {
     throw new Error("plan without keys should explain the missing provider key, got: " + planText.slice(0, 300));
   }
 
-  console.log("MCP smoke OK: handshake, tools/list, restack_scan (+_restack JSON), no-key plan error");
+  const prompts = await request(5, "prompts/list", {});
+  const promptNames = prompts.prompts.map((p) => p.name).sort();
+  if (JSON.stringify(promptNames) !== JSON.stringify(["migration_walkthrough", "resume_migration"])) {
+    throw new Error("unexpected prompt list: " + promptNames.join(", "));
+  }
+
+  const walkthrough = await request(6, "prompts/get", {
+    name: "migration_walkthrough",
+    arguments: { stack: "django" },
+  });
+  const walkText = walkthrough.messages?.[0]?.content?.text ?? "";
+  if (!walkText.includes("Detected stack: django → target: fastapi")) {
+    throw new Error("walkthrough prompt missing stack section: " + walkText.slice(0, 200));
+  }
+
+  const resources = await request(7, "resources/list", {});
+  const uris = resources.resources.map((r) => r.uri);
+  for (const want of ["restack://docs/cli.md", "restack://state.json", "restack://stacks/django"]) {
+    if (!uris.includes(want)) {
+      throw new Error(`resources/list missing ${want} (got: ${uris.join(", ")})`);
+    }
+  }
+
+  const stackRes = await request(8, "resources/read", { uri: "restack://stacks/django" });
+  const stackText = stackRes.contents?.[0]?.text ?? "";
+  if (!stackText.includes("Legacy stack: django")) {
+    throw new Error("stack resource content unexpected: " + stackText.slice(0, 200));
+  }
+
+  console.log(
+    "MCP smoke OK: handshake, tools/list, restack_scan (+_restack JSON), no-key plan error, prompts (2), resources (stack/CLI/state)",
+  );
   process.exitCode = 0;
 } catch (err) {
   console.error("MCP smoke FAILED:", err.message);

@@ -1,13 +1,17 @@
 /**
  * MCP server tests over the in-memory transport: handshake metadata, tool
- * list, scan tool output (agent summary + `_restack` JSON block) and graceful
- * status handling. Plan/convert need a provider key — their no-key contract
- * is pinned by test/mcp-smoke.mjs in CI (env keys stripped).
+ * list, scan tool output (agent summary + `_restack` JSON block), graceful
+ * status handling, and the guidance layer — prompts (migration walkthrough,
+ * resume) and resources (stack notes, CLI reference, run state). Plan/convert
+ * need a provider key — their no-key contract is pinned by test/mcp-smoke.mjs
+ * in CI (env keys stripped).
  */
-import { describe, expect, it } from "vitest";
+import { afterAll, describe, expect, it } from "vitest";
+import { rm } from "node:fs/promises";
 import { Client } from "@modelcontextprotocol/sdk/client/index.js";
 import { InMemoryTransport } from "@modelcontextprotocol/sdk/inMemory.js";
 import { createRestackMcpServer } from "../src/mcp.js";
+import { saveState } from "../src/state.js";
 import { VERSION } from "../src/version.js";
 
 async function connect(): Promise<Client> {
@@ -84,6 +88,136 @@ describe("restack MCP server", () => {
     });
     const text = textOf(res as { content?: { type: string; text?: string }[] });
     expect(text).toContain("No restack state found");
+    await client.close();
+  });
+});
+
+describe("restack MCP prompts & resources", () => {
+  const stateDir = "test/.mcp-state-fixture";
+
+  afterAll(async () => {
+    await rm(stateDir, { recursive: true, force: true });
+  });
+
+  /** Pull the single user-message text out of a prompt result. */
+  function promptText(res: { messages: { role: string; content: { type: string; text?: string } }[] }): string {
+    expect(res.messages.length, "prompt should carry one message").toBeGreaterThan(0);
+    const msg = res.messages[0];
+    expect(msg.role).toBe("user");
+    expect(msg.content.type).toBe("text");
+    return msg.content.text ?? "";
+  }
+
+  it("lists both guidance prompts", async () => {
+    const client = await connect();
+    const { prompts } = await client.listPrompts();
+    expect(prompts.map((p) => p.name).sort()).toEqual(["migration_walkthrough", "resume_migration"]);
+    await client.close();
+  });
+
+  it("migration_walkthrough without args points at restack_scan", async () => {
+    const client = await connect();
+    const res = await client.getPrompt({ name: "migration_walkthrough", arguments: {} });
+    const text = promptText(res as never);
+    expect(text).toContain("restack migration walkthrough");
+    expect(text).toContain("restack_scan");
+    expect(text).toContain("maxCostUsd");
+    // Not stack-tailored yet → tells the agent to detect first.
+    expect(text).toContain("restack_scan");
+    expect(text).not.toContain("Detected stack:");
+    await client.close();
+  });
+
+  it("migration_walkthrough tailors to a known stack", async () => {
+    const client = await connect();
+    const res = await client.getPrompt({ name: "migration_walkthrough", arguments: { stack: "django" } });
+    const text = promptText(res as never);
+    expect(text).toContain("Detected stack: django → target: fastapi");
+    expect(text).toContain("SQLAlchemy");
+    await client.close();
+  });
+
+  it("migration_walkthrough rejects unknown stacks", async () => {
+    const client = await connect();
+    const res = await client.getPrompt({ name: "migration_walkthrough", arguments: { stack: "perl-cgi" } });
+    expect(promptText(res as never)).toContain("not a known restack stack");
+    await client.close();
+  });
+
+  it("resume_migration without state guides to a fresh start", async () => {
+    const client = await connect();
+    const res = await client.getPrompt({ name: "resume_migration", arguments: { outDir: "test/.mcp-nothing-here" } });
+    expect(promptText(res as never)).toContain("No restack run state found");
+    await client.close();
+  });
+
+  it("resume_migration reads saved state and offers resume steps", async () => {
+    await saveState(stateDir, {
+      version: 1 as const,
+      projectRoot: "test/fixtures/php-app",
+      target: "nextjs",
+      model: "claude-sonnet-4-5",
+      planHash: "test-hash",
+      createdAt: new Date().toISOString(),
+      updatedAt: new Date().toISOString(),
+      usd: 0.42,
+      completedSources: {
+        "includes/db.php": { status: "converted", outputs: ["lib/db.ts"], attempts: 1 },
+        "about.php": { status: "failed", outputs: [], attempts: 2, error: "verify failed" },
+      },
+    });
+    const client = await connect();
+    const res = await client.getPrompt({ name: "resume_migration", arguments: { outDir: stateDir } });
+    const text = promptText(res as never);
+    expect(text).toContain("test/fixtures/php-app → nextjs");
+    expect(text).toContain("Spend so far");
+    expect(text).toContain("converted: 1");
+    expect(text).toContain("failed: 1");
+    expect(text).toContain("Failed sources: about.php");
+    expect(text).toContain("resume: true");
+    await client.close();
+  });
+
+  it("exposes static resources and the stacks template", async () => {
+    const client = await connect();
+    const { resources } = await client.listResources();
+    const uris = resources.map((r) => r.uri).sort();
+    expect(uris).toContain("restack://docs/cli.md");
+    expect(uris).toContain("restack://state.json");
+    // Template list expansion surfaces the per-stack notes.
+    expect(uris.filter((u) => u.startsWith("restack://stacks/")).length).toBe(3);
+
+    const { resourceTemplates } = await client.listResourceTemplates();
+    expect(resourceTemplates.map((t) => t.uriTemplate)).toEqual(["restack://stacks/{stack}"]);
+    await client.close();
+  });
+
+  it("reads stack notes and rejects unknown stacks", async () => {
+    const client = await connect();
+    const res = await client.readResource({ uri: "restack://stacks/django" });
+    expect(res.contents.length).toBe(1);
+    const block = res.contents[0] as { text?: string };
+    expect(block.text).toContain("Legacy stack: django");
+    expect(block.text).toContain("FastAPI");
+
+    const bad = await client.readResource({ uri: "restack://stacks/nope" });
+    expect((bad.contents[0] as { text?: string }).text).toContain("Unknown stack");
+    await client.close();
+  });
+
+  it("reads the CLI reference resource", async () => {
+    const client = await connect();
+    const res = await client.readResource({ uri: "restack://docs/cli.md" });
+    const block = res.contents[0] as { text?: string };
+    expect(block.text).toContain("restack convert");
+    expect(block.text).toContain("restack mcp");
+    await client.close();
+  });
+
+  it("state resource is graceful before any run", async () => {
+    const client = await connect();
+    const res = await client.readResource({ uri: "restack://state.json" });
+    expect((res.contents[0] as { text?: string }).text).toContain("No restack state found");
     await client.close();
   });
 });

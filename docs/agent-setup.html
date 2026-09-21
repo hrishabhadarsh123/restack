@@ -49,6 +49,18 @@
         <code>scan → plan → convert → status</code> and react to real data (cost, waves, failures)
         instead of parsing prose.
       </p>
+      <p>
+        The server also exposes <strong>prompts</strong> (structured guidance templates the agent
+        can pull before acting) and <strong>resources</strong> (context it can attach):
+      </p>
+      <table>
+        <tr><th>Kind</th><th>Name / URI</th><th>What it gives the agent</th></tr>
+        <tr><td>prompt</td><td><code>migration_walkthrough</code></td><td>Step-by-step playbook: scan → plan → review with the user → convert → status/resume, tailored per stack (pass <code>stack</code>/<code>target</code> args)</td></tr>
+        <tr><td>prompt</td><td><code>resume_migration</code></td><td>How to continue an interrupted/failed run from saved <code>.restack/</code> state (pass <code>outDir</code> if not the default)</td></tr>
+        <tr><td>resource</td><td><code>restack://stacks/{stack}</code></td><td>Conversion notes per legacy stack (<code>php-jquery</code>, <code>python2</code>, <code>django</code>) + its modern target</td></tr>
+        <tr><td>resource</td><td><code>restack://docs/cli.md</code></td><td>Compact CLI reference (commands, flags, provider env vars)</td></tr>
+        <tr><td>resource</td><td><code>restack://state.json</code></td><td>The latest run state: per-file statuses, spend, model</td></tr>
+      </table>
     </section>
 
     <section>

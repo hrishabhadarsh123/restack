@@ -154,6 +154,20 @@ restack mcp          # stdio transport (the standard for local agent tools)
 | `restack_convert` | full conversion into `<outDir>` (verify + repair, resume support) |
 | `restack_status` | inspect a previous run: statuses, spend, what would resume |
 
+The server also exposes **prompts** (structured guidance templates) and **resources** (context the
+agent can attach to its own window):
+
+| Prompt | What it gives the agent |
+|---|---|
+| `migration_walkthrough` | step-by-step scan → plan → review → convert → resume playbook, tailored per legacy stack |
+| `resume_migration` | how to continue an interrupted/failed run from saved `.restack/` state |
+
+| Resource | URI |
+|---|---|
+| Per-stack conversion notes (`php-jquery`, `python2`, `django`) | `restack://stacks/{stack}` |
+| Compact CLI reference | `restack://docs/cli.md` |
+| Latest run state (statuses, spend, model) | `restack://state.json` |
+
 Example `mcpServers` config (Antigravity / Claude Code / Cursor / Hermes all use this shape):
 
 ```json

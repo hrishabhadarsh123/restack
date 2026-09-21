@@ -9,7 +9,7 @@
  *
  * Run: `restack mcp` (stdio transport — the standard for local agent tools).
  */
-import { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
+import { McpServer, ResourceTemplate } from "@modelcontextprotocol/sdk/server/mcp.js";
 import { StdioServerTransport } from "@modelcontextprotocol/sdk/server/stdio.js";
 import { z } from "zod";
 import path from "node:path";
@@ -36,6 +36,18 @@ import {
 } from "./types.js";
 import { logger } from "./util/logger.js";
 import { VERSION } from "./version.js";
+import {
+  STATE_RESOURCE_URI,
+  CLI_REFERENCE_URI,
+  STACK_URI_TEMPLATE,
+  KNOWN_STACKS,
+  buildWalkthroughPrompt,
+  buildResumePrompt,
+  buildStackResource,
+  listStackResources,
+  buildCliReferenceResource,
+  buildStateResource,
+} from "./mcp-content.js";
 import { formatCost, formatDuration, formatPercent, formatTokens } from "./util/format.js";
 
 /** Format a scan result as an agent-facing summary. */
@@ -98,7 +110,13 @@ async function tool(body: () => Promise<{ text: string; json?: unknown }>): Prom
 export function createRestackMcpServer(): McpServer {
   const server = new McpServer(
     { name: "restack", version: VERSION },
-    { instructions: "Convert legacy codebases (PHP/jQuery, Python 2, Django) to modern stacks (Next.js, FastAPI). Start with restack_scan, then restack_plan (dry-run) before a full restack_convert." },
+    {
+      instructions:
+        "Convert legacy codebases (PHP/jQuery, Python 2, Django) to modern stacks (Next.js, FastAPI). " +
+        "Start with restack_scan, then restack_plan (dry-run) before a full restack_convert. " +
+        "The migration_walkthrough prompt gives structured guidance, and resources expose the CLI reference, " +
+        "per-stack conversion notes (restack://stacks/{stack}) and the current run state.",
+    },
   );
 
   server.tool(
@@ -308,6 +326,86 @@ export function createRestackMcpServer(): McpServer {
       }),
   );
 
+  // ---------------------------------------------------------------------------
+  // Prompts — structured guidance templates agents can pull on demand.
+  // ---------------------------------------------------------------------------
+
+  server.registerPrompt(
+    "migration_walkthrough",
+    {
+      title: "Migration walkthrough",
+      description:
+        "Step-by-step guidance for migrating a legacy project with restack: scan → plan → review with the user → convert → status/resume.",
+      argsSchema: {
+        stack: z
+          .string()
+          .optional()
+          .describe(`Legacy stack to tailor the guidance for ("${KNOWN_STACKS.join(`", "`)}" or "auto"/omitted to detect with restack_scan)`),
+        target: z.enum(["nextjs", "fastapi"]).optional().describe("Modern target (derived from the stack if omitted)"),
+      },
+    },
+    (args) => buildWalkthroughPrompt(args),
+  );
+
+  server.registerPrompt(
+    "resume_migration",
+    {
+      title: "Resume migration",
+      description: "Guidance for resuming an interrupted/failed restack run from saved .restack state.",
+      argsSchema: {
+        outDir: z.string().optional().describe("Output directory holding .restack/ state (default ./converted)"),
+      },
+    },
+    (args) => buildResumePrompt(args),
+  );
+
+  // ---------------------------------------------------------------------------
+  // Resources — context the agent can attach: CLI reference, run state,
+  // per-stack conversion notes (the same notes the converter injects).
+  // ---------------------------------------------------------------------------
+
+  server.registerResource(
+    "run-state",
+    STATE_RESOURCE_URI,
+    {
+      title: "Current run state",
+      description: "The latest restack run state (.restack/state.json): per-file statuses, spend, model. Empty text until a conversion has run.",
+      mimeType: "application/json",
+    },
+    (uri) => buildStateResource(uri.href),
+  );
+
+  server.registerResource(
+    "cli-reference",
+    CLI_REFERENCE_URI,
+    {
+      title: "CLI reference",
+      description: "Compact restack CLI reference: every command, its flags and the provider environment variables.",
+      mimeType: "text/markdown",
+    },
+    (uri) => buildCliReferenceResource(uri.href),
+  );
+
+  server.registerResource(
+    "stack-notes",
+    new ResourceTemplate(STACK_URI_TEMPLATE, {
+      list: async () => listStackResources(),
+      complete: {
+        stack: (value) => KNOWN_STACKS.filter((s) => s.startsWith(value)),
+      },
+    }),
+    {
+      title: "Stack conversion notes",
+      description: "Legacy-stack conversion notes (the same guidance the converter injects) plus the modern target for each stack.",
+      mimeType: "text/markdown",
+    },
+    (uri, vars) => {
+      const raw = vars.stack;
+      const stack = Array.isArray(raw) ? raw[0] : raw;
+      return buildStackResource(stack ?? "", uri.href);
+    },
+  );
+
   return server;
 }
 
@@ -315,5 +413,7 @@ export function createRestackMcpServer(): McpServer {
 export async function runMcpServer(): Promise<void> {
   const server = createRestackMcpServer();
   await server.connect(new StdioServerTransport());
-  logger.info(`restack MCP server v${VERSION} ready on stdio (tools: restack_scan, restack_plan, restack_convert, restack_status)`);
+  logger.info(
+    `restack MCP server v${VERSION} ready on stdio (tools: restack_scan, restack_plan, restack_convert, restack_status; prompts: migration_walkthrough, resume_migration; resources: state, cli-reference, stacks/{stack})`,
+  );
 }
