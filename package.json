@@ -61,7 +61,7 @@
     "@google/genai": "^2.23.0",
     "@modelcontextprotocol/sdk": "^1.30.0",
     "commander": "^14.0.0",
-    "openai": "^7.20.0",
+    "openai": "^7.23.0",
     "ora": "^9.4.1",
     "picocolors": "^1.1.1",
     "zod": "^4.1.5"
