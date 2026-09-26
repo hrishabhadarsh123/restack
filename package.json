@@ -60,7 +60,7 @@
     "@clack/prompts": "^1.8.1",
     "@google/genai": "^2.23.0",
     "@modelcontextprotocol/sdk": "^1.30.0",
-    "commander": "^14.0.0",
+    "commander": "^15.0.0",
     "openai": "^7.20.0",
     "ora": "^9.4.1",
     "picocolors": "^1.1.1",
